@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -42,9 +43,11 @@ from .evaluate import (
     compute_metrics,
     threshold_analysis,
 )
-from .explain import global_importance, shap_available
+from .explain import global_importance, permutation_global_importance, shap_available
+from .fairness import fairness_report
 from .models import build_model_specs, build_pipeline, xgboost_available
 from .split import make_splits
+from .tuning import apply_params, cross_val_select, tune_model
 
 import pandas as pd
 
@@ -55,6 +58,19 @@ def _now() -> str:
 
 def _prob(estimator, X) -> np.ndarray:
     return estimator.predict_proba(X)[:, 1]
+
+
+def _portable_reference(path: Path, root: Path) -> str:
+    """A portable, non-leaking reference to ``path`` for persisted metadata.
+
+    Prefer the path relative to the repo root; if ``path`` lives outside the
+    root (a configured absolute path), fall back to the bare filename so we
+    never persist — or later expose via the API — an absolute host path.
+    """
+    try:
+        return path.relative_to(root).as_posix()
+    except ValueError:
+        return path.name
 
 
 def ensure_dataset(cfg: Config) -> None:
@@ -111,47 +127,78 @@ def train(cfg: Config) -> dict[str, Any]:
     for note in skipped:
         print(f"[run] {note}")
 
-    # --- train + validate each model ---
-    selection_metric = cfg["evaluation"]["selection_metric"]
-    per_model: dict[str, Any] = {}
-    fitted: dict[str, Any] = {}
-    for spec in specs:
-        print(f"[run] training {spec.display_name} ...")
-        pipe = build_pipeline(spec, cfg)
-        pipe.fit(_X(split.X_train), split.y_train)
-        val_prob = _prob(pipe, _X(split.X_val))
-        val_metrics = compute_metrics(split.y_val, val_prob)
-        per_model[spec.key] = {
-            "display_name": spec.display_name,
-            "val_metrics": val_metrics,
-        }
-        fitted[spec.key] = (spec, pipe)
-        print(f"[run]   {spec.display_name}: "
-              f"val {selection_metric}={val_metrics.get(selection_metric)}")
-
-    if not fitted:
-        raise SystemExit("[run] BLOCKER: no models were trained.")
-
-    # --- select best on VAL ---
-    def _score(key: str) -> float:
-        v = per_model[key]["val_metrics"].get(selection_metric)
-        return v if isinstance(v, (int, float)) else -1.0
-
-    best_key = max(fitted, key=_score)
-    best_spec, best_pipe = fitted[best_key]
-    print(f"[run] selected: {best_spec.display_name} "
-          f"(val {selection_metric}={_score(best_key):.4f})")
-
-    # --- refit best on TRAIN+VAL, calibrate ---
-    X_trainval = pd.concat([split.X_train, split.X_val])
+    X_train, X_val, X_test = _X(split.X_train), _X(split.X_val), _X(split.X_test)
+    X_trainval = pd.concat([X_train, X_val])
     y_trainval = pd.concat([split.y_train, split.y_val])
 
-    refit = build_pipeline(best_spec, cfg)
-    refit.fit(_X(X_trainval), y_trainval)
-    uncal_test_prob = _prob(refit, _X(split.X_test))
+    # --- optional hyperparameter tuning (RandomizedSearchCV on a subsample) ---
+    # Tune BEFORE selection so the model comparison is between tuned models.
+    tuning_results: dict[str, Any] = {}
+    tuned_specs: list = []
+    for spec in specs:
+        res = tune_model(spec, X_trainval, y_trainval, cfg)
+        if res is not None:
+            tuning_results[spec.key] = res
+            tuned_specs.append(apply_params(spec, res["best_params"]))
+            print(f"[run] tuned {spec.display_name}: {res['best_params']} "
+                  f"(cv {res['scoring']}={res['best_cv_score']:.4f})")
+        else:
+            tuned_specs.append(spec)
+    specs = tuned_specs
 
-    calibrated = calibrate_pipeline(refit, _X(X_trainval), y_trainval, cfg)
-    cal_test_prob = _prob(calibrated, _X(split.X_test))
+    # --- per-model held-out VALIDATION metrics (train on TRAIN, eval VAL) ---
+    # Kept as an interpretable head-to-head comparison on a single held-out split.
+    selection_metric = cfg["evaluation"]["selection_metric"]
+    per_model: dict[str, Any] = {}
+    spec_by_key: dict[str, Any] = {}
+    for spec in specs:
+        print(f"[run] training {spec.display_name} (val comparison) ...")
+        pipe = build_pipeline(spec, cfg)
+        pipe.fit(X_train, split.y_train)
+        val_prob = _prob(pipe, X_val)
+        per_model[spec.key] = {
+            "display_name": spec.display_name,
+            "val_metrics": compute_metrics(split.y_val, val_prob),
+        }
+        spec_by_key[spec.key] = spec
+
+    if not spec_by_key:
+        raise SystemExit("[run] BLOCKER: no models were trained.")
+
+    # --- select best model ---
+    cv_folds = int(cfg.get("selection", {}).get("cv_folds", 1))
+    per_model_cv: dict[str, Any] = {}
+    if cv_folds > 1:
+        # Stratified k-fold CV on TRAIN+VAL, select by MEAN score (std reported).
+        print(f"[run] cross-validated selection ({cv_folds}-fold) ...")
+        best_key, per_model_cv = cross_val_select(specs, X_trainval, y_trainval, cfg)
+        for spec in specs:
+            m = per_model_cv[spec.key]
+            per_model[spec.key]["cv_metrics"] = m
+            print(f"[run]   {spec.display_name}: cv {m['scoring']}="
+                  f"{m['mean']:.4f} +/- {m['std']:.4f}")
+        selection_basis = f"cross_validation_{cv_folds}fold_mean"
+        print(f"[run] selected: {spec_by_key[best_key].display_name} "
+              f"(cv mean {per_model_cv[best_key]['scoring']}="
+              f"{per_model_cv[best_key]['mean']:.4f})")
+    else:
+        def _score(key: str) -> float:
+            v = per_model[key]["val_metrics"].get(selection_metric)
+            return v if isinstance(v, (int, float)) else -1.0
+        best_key = max(spec_by_key, key=_score)
+        selection_basis = "single_validation_split"
+        print(f"[run] selected: {spec_by_key[best_key].display_name} "
+              f"(val {selection_metric}={_score(best_key):.4f})")
+
+    best_spec = spec_by_key[best_key]
+
+    # --- refit best on TRAIN+VAL, calibrate (X_trainval/y_trainval built above) ---
+    refit = build_pipeline(best_spec, cfg)
+    refit.fit(X_trainval, y_trainval)
+    uncal_test_prob = _prob(refit, X_test)
+
+    calibrated = calibrate_pipeline(refit, X_trainval, y_trainval, cfg)
+    cal_test_prob = _prob(calibrated, X_test)
 
     # --- select the F1-optimal operating point on VALIDATION (never TEST) ---
     # A decision threshold is a tunable operating point, so it must NOT be chosen
@@ -163,7 +210,7 @@ def train(cfg: Config) -> dict[str, Any]:
     # negligible capacity to overfit and TEST stays completely untouched by
     # selection. The threshold is reported for analysis, not auto-applied at
     # serving (risk bands use the configured probability cut points).
-    cal_val_prob = _prob(calibrated, _X(split.X_val))
+    cal_val_prob = _prob(calibrated, X_val)
     sel = best_f1_threshold(split.y_val, cal_val_prob)
     sel_thr = sel["threshold"]
     test_at_sel = compute_metrics(split.y_test, cal_test_prob, threshold=sel_thr)
@@ -197,7 +244,17 @@ def train(cfg: Config) -> dict[str, Any]:
           f"pr_auc={test_metrics['pr_auc']} brier={test_metrics['brier_score']:.4f}")
 
     # --- global explainability (on calibrated model) ---
+    # Gini/coef importance (fold-averaged), plus permutation importance on the
+    # held-out TEST set — the latter is model-agnostic, computed out-of-sample,
+    # and aggregated per ORIGINAL input feature (not fragmented across one-hot
+    # dummies), so it is the more defensible headline importance.
     importance = global_importance(calibrated, cfg)
+    perm_importance = permutation_global_importance(
+        calibrated, X_test, split.y_test, cfg)
+
+    # --- fairness slicing diagnostic on TEST (CODE_GENDER, age bands) ---
+    fairness = fairness_report(X_test, split.y_test, cal_test_prob, cfg,
+                               threshold=sel_thr)
 
     # --- persist ---
     save_model(calibrated, cfg)
@@ -212,10 +269,16 @@ def train(cfg: Config) -> dict[str, Any]:
         "synthetic": is_synth,
         "synthetic_warning": manifest.get("synthetic_warning"),
         # relative path so it is portable and does not leak an absolute
-        # filesystem path through /api/model/info
-        "manifest_reference": cfg.path("manifest").relative_to(cfg.root).as_posix(),
+        # filesystem path through /api/model/info. When the configured manifest
+        # lives outside the repo root (e.g. an absolute path set via
+        # LOAN_RISK_CONFIG, which config.py explicitly supports), relative_to
+        # would raise — fall back to the bare filename, which is equally
+        # portable and leak-safe.
+        "manifest_reference": _portable_reference(cfg.path("manifest"), cfg.root),
         "feature_schema_version": "1.0",
         "selection_metric": selection_metric,
+        "selection_basis": selection_basis,
+        "hyperparameters_tuned": bool(tuning_results),
         "calibration": {
             "method": cfg["calibration"]["method"],
             "cv": cfg["calibration"]["cv"],
@@ -243,10 +306,13 @@ def train(cfg: Config) -> dict[str, Any]:
         "synthetic": is_synth,
         "synthetic_warning": manifest.get("synthetic_warning"),
         "selection_metric": selection_metric,
+        "selection_basis": selection_basis,
         "selected_model": best_spec.display_name,
         "split_diagnostics": split.diagnostics,
         "validation_summary": report.summary(),
         "per_model_validation": per_model,
+        "per_model_cross_validation": per_model_cv,
+        "hyperparameter_tuning": tuning_results,
         "final_test_metrics": test_metrics,
         "threshold_analysis": thr,
         "selected_threshold": selected_threshold,
@@ -255,6 +321,8 @@ def train(cfg: Config) -> dict[str, Any]:
             "curve_before": calib_before, "curve_after": calib_after,
         },
         "global_importance": importance,
+        "permutation_importance": perm_importance,
+        "fairness": fairness,
         "skipped_models": skipped,
     }
     metrics_path = save_json(metrics_blob, METRICS_FILE, cfg)

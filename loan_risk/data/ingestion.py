@@ -99,12 +99,17 @@ def standardize(df: pd.DataFrame, cfg: Config | None = None) -> pd.DataFrame:
     # DAYS_BIRTH (negative) -> AGE_YEARS (positive)
     out["AGE_YEARS"] = (-pd.to_numeric(df["DAYS_BIRTH"], errors="coerce")) / 365.25
 
-    # DAYS_EMPLOYED (negative) -> EMPLOYMENT_YEARS; 365243 sentinel -> NaN + flag
+    # DAYS_EMPLOYED (negative) -> EMPLOYMENT_YEARS; 365243 sentinel OR genuine
+    # NaN -> NaN + flag. We flag BOTH the pensioner/unemployed sentinel and a
+    # truly-missing value (mirroring the EXT_SOURCE .isna() flags above), so the
+    # model can always distinguish "employment unknown" from a real, later-imputed
+    # value — and so training matches serving, where an omitted EMPLOYMENT_YEARS
+    # also sets the flag.
     days_emp = pd.to_numeric(df["DAYS_EMPLOYED"], errors="coerce")
-    is_sentinel = days_emp == sentinel
-    out[EMPLOYMENT_MISSING_FLAG] = is_sentinel.astype(int)
+    is_missing = (days_emp == sentinel) | days_emp.isna()
+    out[EMPLOYMENT_MISSING_FLAG] = is_missing.astype(int)
     emp_years = (-days_emp) / 365.25
-    emp_years = emp_years.where(~is_sentinel, other=np.nan)
+    emp_years = emp_years.where(~is_missing, other=np.nan)
     out["EMPLOYMENT_YEARS"] = emp_years
 
     # categoricals passthrough as string (NaN preserved)

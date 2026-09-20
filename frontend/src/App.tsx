@@ -23,6 +23,7 @@ export default function App() {
           <Route path="/dataset" element={<DatasetQuality />} />
           <Route path="/model" element={<ModelInfo />} />
           <Route path="/responsible-use" element={<ResponsibleUse />} />
+          <Route path="*" element={<Overview />} />
         </Routes>
       </Layout>
     </PredictionProvider>

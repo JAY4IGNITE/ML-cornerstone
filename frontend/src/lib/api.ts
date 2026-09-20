@@ -59,11 +59,6 @@ export const api = {
   featureSchema: () => request<FeatureSchema>("/api/feature-schema"),
   metrics: () => request<Metrics>("/api/metrics"),
   datasetQuality: () => request<DatasetQuality>("/api/dataset/quality"),
-  validateInput: (payload: Record<string, unknown>) =>
-    request<{ valid: boolean; errors: unknown[] }>("/api/validate-input", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
   predict: (payload: Record<string, unknown>) =>
     request<PredictResponse>("/api/predict", {
       method: "POST",

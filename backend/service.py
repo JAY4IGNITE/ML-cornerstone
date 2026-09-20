@@ -12,6 +12,7 @@ Persistence seam: `persist_prediction` is a no-op stub returning None now
 """
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import Any, Optional
 
@@ -27,6 +28,8 @@ from loan_risk.pipeline.risk_score import (
     score_definition,
 )
 from loan_risk.schema import categorical_names, numeric_names
+
+logger = logging.getLogger(__name__)
 
 
 def _safe_reference(value: Any) -> Optional[str]:
@@ -75,6 +78,10 @@ class ModelService:
             self.model = None
             self._load_error = str(exc)
         except Exception as exc:  # noqa: BLE001 — deliberate: never crash on load
+            # Corrupt/unreadable artifact: degrade to "model unavailable" but log
+            # the full traceback server-side so the operator can diagnose it. The
+            # client-facing message stays generic (no internal detail leakage).
+            logger.exception("Model artifacts could not be loaded")
             self.model = None
             self._load_error = f"Model artifact could not be loaded: {type(exc).__name__}."
 
@@ -119,7 +126,8 @@ class ModelService:
             try:
                 explanation = local_explanation(self.model, X, self.cfg)
                 explanation_available = bool(explanation.get("contributions"))
-            except Exception:
+            except Exception:  # noqa: BLE001 — explanation is best-effort, never fatal
+                logger.exception("Local explanation failed; returning prediction without it")
                 explanation = None
                 explanation_available = False
 
@@ -193,6 +201,7 @@ class ModelService:
             "feature_schema_version": m.get("feature_schema_version", "unknown"),
             "calibration": m.get("calibration", {}),
             "selection_metric": m.get("selection_metric"),
+            "selection_basis": m.get("selection_basis"),
             "responsible_use_note": m.get(
                 "responsible_use_note",
                 "Analytical estimate; requires human oversight.",

@@ -8,16 +8,70 @@ first import of backend.main.
 """
 from __future__ import annotations
 
+import atexit
+import os
+import shutil
+import tempfile
+from pathlib import Path
+
 import pandas as pd
 import pytest
+import yaml
 
-from loan_risk.config import load_config
-from loan_risk.data.ingestion import resolve_source_path, standardize
-from loan_risk.pipeline import artifacts
+# ---------------------------------------------------------------------------
+# Hermetic test configuration (must run before anything imports the config or
+# the backend app, so it lives at conftest import time — pytest imports conftest
+# before collecting/importing any test module).
+#
+# The shipped config/config.yaml sets `dataset.source: real`, but the real Kaggle
+# `application_train.csv` is git-ignored, absent on a clean clone, and gated
+# behind competition-rule acceptance. A suite that honored that source would
+# error at fixture setup on every fresh checkout. We therefore synthesize a
+# throwaway config that (a) forces `dataset.source: synthetic` (self-generated on
+# demand) and (b) redirects every writable path (artifacts, reports, data,
+# manifest) into an isolated temp directory. This makes the suite independent of
+# the real dataset AND non-destructive: it never reads or clobbers a real trained
+# model the developer may already have in ./artifacts. The backend app also calls
+# load_config(), so pointing LOAN_RISK_CONFIG at this file keeps the model the API
+# serves consistent with the config the tests assert against.
+# ---------------------------------------------------------------------------
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_TMP_ROOT = Path(tempfile.mkdtemp(prefix="loan_risk_tests_"))
+atexit.register(shutil.rmtree, _TMP_ROOT, ignore_errors=True)
+
+
+def _write_hermetic_config() -> Path:
+    with (_REPO_ROOT / "config" / "config.yaml").open("r", encoding="utf-8") as fh:
+        raw = yaml.safe_load(fh)
+    raw["dataset"]["source"] = "synthetic"
+    raw["paths"] = {
+        "data_raw": (_TMP_ROOT / "data" / "raw").as_posix(),
+        "data_synthetic": (_TMP_ROOT / "data" / "synthetic").as_posix(),
+        "data_processed": (_TMP_ROOT / "data" / "processed").as_posix(),
+        "artifacts": (_TMP_ROOT / "artifacts").as_posix(),
+        "reports": (_TMP_ROOT / "reports").as_posix(),
+        "manifest": (_TMP_ROOT / "data" / "manifest.json").as_posix(),
+    }
+    out = _TMP_ROOT / "config.hermetic.yaml"
+    with out.open("w", encoding="utf-8") as fh:
+        yaml.safe_dump(raw, fh, sort_keys=False)
+    return out
+
+
+os.environ["LOAN_RISK_CONFIG"] = str(_write_hermetic_config())
+
+# Import config machinery only after LOAN_RISK_CONFIG is set, and clear any cache
+# a stray earlier import may have populated with the real config.
+from loan_risk.config import load_config  # noqa: E402
+from loan_risk.data.ingestion import resolve_source_path, standardize  # noqa: E402
+from loan_risk.pipeline import artifacts  # noqa: E402
+
+load_config.cache_clear()
 
 
 @pytest.fixture(scope="session")
 def cfg():
+    """The hermetic, synthetic-backed config every test and the backend share."""
     return load_config()
 
 

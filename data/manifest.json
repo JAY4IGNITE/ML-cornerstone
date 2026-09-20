@@ -3,7 +3,7 @@
   "source_kind": "real",
   "synthetic_warning": null,
   "source_url": "https://www.kaggle.com/competitions/home-credit-default-risk",
-  "retrieval_or_generation_date": "2026-09-20T07:41:16Z",
+  "retrieval_or_generation_date": "2026-09-20T11:59:20Z",
   "primary_file": "application_train.csv",
   "license_and_usage": "Kaggle Home Credit Default Risk competition rules apply to the real data; must be accepted on Kaggle. Synthetic fixture: no license, internal use only.",
   "row_count": 307511,

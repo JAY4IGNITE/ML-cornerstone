@@ -4,7 +4,6 @@
 - Stratified on the target when enabled (handles class imbalance).
 - De-duplicates on the applicant id BEFORE splitting so the same applicant can
   never appear in two splits (record leakage).
-- Optional time-aware split diagnostic when a time column is configured.
 """
 from __future__ import annotations
 

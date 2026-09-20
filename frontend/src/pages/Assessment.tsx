@@ -30,10 +30,14 @@ const OPTIONAL = new Set([
   "OCCUPATION_TYPE",
   "AMT_GOODS_PRICE",
   "AMT_ANNUITY",
+  "EMPLOYMENT_YEARS",
 ]);
 
 export default function Assessment() {
   const { data: schema, loading, error, reload } = useAsync(() => api.featureSchema(), []);
+  // Best-effort: warn here too when the served model is synthetic (this is where
+  // a human enters an applicant). Never blocks or crashes the form if it fails.
+  const { data: model } = useAsync(() => api.modelInfo().catch(() => null), []);
   const navigate = useNavigate();
   const { setPrediction } = usePrediction();
 
@@ -117,6 +121,13 @@ export default function Assessment() {
           scores, occupation) may be left blank and will be imputed.
         </p>
       </div>
+
+      {model?.synthetic && (
+        <Alert tone="warning" title="Synthetic data">
+          {model.synthetic_warning ??
+            "This model was trained on synthetic data. Results are for demonstration only and must not inform real lending."}
+        </Alert>
+      )}
 
       <form onSubmit={onSubmit} noValidate className="space-y-4">
         <Card title="Financials">

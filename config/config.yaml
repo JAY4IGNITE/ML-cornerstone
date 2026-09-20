@@ -36,8 +36,6 @@ split:
   test_size: 0.20
   val_size: 0.20                # fraction OF the train-remainder
   stratify: true
-  # Set to a column name to enable a time-aware split diagnostic; null = off.
-  time_column: null
 
 preprocessing:
   numeric_imputation: "median"
@@ -79,7 +77,36 @@ calibration:
 evaluation:
   # Model selected by this metric (NOT accuracy alone — 03_ML_REQUIREMENTS.md).
   selection_metric: "roc_auc"
+
+selection:
+  # Model selection uses stratified k-fold cross-validation on TRAIN+VAL and
+  # picks the best MEAN score (std reported), instead of a single-split argmax,
+  # so selection is not one lucky split. Set to 1 to fall back to the single
+  # held-out validation split.
   cv_folds: 5
+
+tuning:
+  # Opt-in hyperparameter search (RandomizedSearchCV) for the heavier models.
+  # Runs on a stratified subsample for tractability; the winning params are
+  # refit on the full training data. Disable for a fast, fixed-config run.
+  enabled: true
+  models: ["random_forest", "xgboost"]
+  n_iter: 8
+  cv_folds: 3
+  max_search_samples: 40000
+  # Distributions are sampled uniformly (lists). Keys are pipeline-scoped
+  # (model__<param>) so they target the estimator inside the Pipeline.
+  param_distributions:
+    random_forest:
+      model__n_estimators: [200, 300, 400]
+      model__max_depth: [8, 12, 16, 20]
+      model__min_samples_leaf: [10, 20, 50]
+    xgboost:
+      model__n_estimators: [300, 400, 600]
+      model__max_depth: [4, 5, 6, 8]
+      model__learning_rate: [0.03, 0.05, 0.1]
+      model__subsample: [0.7, 0.8, 1.0]
+      model__colsample_bytree: [0.7, 0.8, 1.0]
 
 risk_score:
   # Transparent, explicitly-defined mapping from probability -> 0..100 score.
@@ -92,8 +119,6 @@ risk_score:
 
 explainability:
   top_k_features: 12
-  shap_background_samples: 100
-  shap_max_eval_samples: 500
 
 api:
   title: "Loan Default Risk API"

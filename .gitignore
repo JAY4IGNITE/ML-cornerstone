@@ -40,6 +40,9 @@ artifacts/**
 reports/**
 !reports/.gitkeep
 
+# ---- graphify knowledge-graph output (local tooling; regenerated) ----
+graphify-out/
+
 # ---- Node / frontend ----
 node_modules/
 frontend/dist/

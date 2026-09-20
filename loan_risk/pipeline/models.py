@@ -45,7 +45,11 @@ def _logreg(cfg: Config) -> ModelSpec:
         C=float(p["C"]), max_iter=int(p["max_iter"]),
         class_weight=p.get("class_weight"), random_state=cfg.seed,
     )
-    return ModelSpec("logistic_regression", "Logistic Regression", est, scale=True)
+    # Scaling matters for the linear model's convergence/conditioning; trees are
+    # scale-invariant and never scale. `scale_for_linear` makes the linear case
+    # configurable (default True) instead of hardcoding it.
+    scale = bool(cfg["preprocessing"].get("scale_for_linear", True))
+    return ModelSpec("logistic_regression", "Logistic Regression", est, scale=scale)
 
 
 def _tree(cfg: Config) -> ModelSpec:

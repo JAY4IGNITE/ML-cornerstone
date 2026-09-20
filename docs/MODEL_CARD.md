@@ -13,7 +13,7 @@
 | **Model** | XGBoost (`model_key: xgboost`) |
 | **Version** | 0.1.0 |
 | **Task** | Default-risk probability estimation (repayment difficulty), NOT loan approval |
-| **Trained at** | 2026-09-20T07:43:10Z |
+| **Trained at** | 2026-09-20T11:58:50Z |
 | **Dataset source** | real (`application_train.csv`) |
 | **Feature schema version** | 1.0 |
 | **Selection metric** | ROC-AUC |
@@ -43,10 +43,13 @@ Source: `artifacts/metadata.json`, `artifacts/metrics.json`.
 - **Loan approval prediction.** This model predicts repayment difficulty, not an
   approval label. Approval workflows, if added, must remain separate
   (`01_PROJECT_CONTEXT.md`).
-- **Fairness / regulatory compliance claims.** No fairness analysis or compliance
-  validation has been performed; do not represent this model as fair, unbiased,
-  or legally compliant without evidence. This matters concretely here: `CODE_GENDER`
-  is among the top features (see below).
+- **Fairness / regulatory compliance claims.** A fairness **diagnostic** exists
+  (`metrics.json.fairness`: per-group selection_rate / FNR / FPR / ROC-AUC sliced
+  by `CODE_GENDER` and `AGE_BAND` at the operating threshold, plus simple disparity
+  ratios), but it is a screen for human review — **not** a fairness certification,
+  legal-compliance assessment, or mitigation. Do not represent this model as fair,
+  unbiased, or legally compliant without evidence. This matters concretely here:
+  `CODE_GENDER` is among the top features (see below).
 - **Adverse-action reasons.** Do not use feature importances to generate
   adverse-action explanations or reasons for denial — importance is association,
   not causation (see Known risks).
@@ -71,8 +74,9 @@ Source: `artifacts/metadata.json`, `artifacts/metrics.json`.
   missing in 56.4% of rows, `EXT_SOURCE_3` in 19.8%, `OCCUPATION_TYPE` in 31.4%,
   and 55,374 rows carry the `DAYS_EMPLOYED` pensioner/unemployed sentinel. The
   pipeline adds `*_MISSING` indicator columns so the model can distinguish
-  "missing" from an imputed value — and `EXT_SOURCE_1_MISSING` turns out to be a
-  top-ranked feature (see below).
+  "missing" from an imputed value — and `EXT_SOURCE_3_MISSING` turns out to be a
+  top-ranked feature (rank 7 in the current fold-averaged global importance, above
+  `EXT_SOURCE_1_MISSING`; see below).
 
 ## Evaluation data
 
@@ -98,65 +102,82 @@ stratified, seed 42):
 
 | Metric | Value |
 |--------|-------|
-| ROC-AUC | 0.7667 |
-| PR-AUC | 0.2556 |
-| Brier score | 0.0672 |
-| Accuracy | 0.9200 |
-| Precision | 0.6405 |
-| Recall | 0.0197 |
-| F1 | 0.0383 |
+| ROC-AUC | 0.7615 |
+| PR-AUC | 0.2504 |
+| Brier score | 0.0675 |
+| Accuracy | 0.9198 |
+| Precision | 0.6096 |
+| Recall | 0.0179 |
+| F1 | 0.0348 |
 
 **Confusion matrix (test, threshold 0.5):**
 
 | | Predicted 0 | Predicted 1 |
 |---|---|---|
-| **Actual 0** | TN = 56,483 | FP = 55 |
-| **Actual 1** | FN = 4,867 | TP = 98 |
+| **Actual 0** | TN = 56,481 | FP = 57 |
+| **Actual 1** | FN = 4,876 | TP = 89 |
 
 **Reading these numbers honestly.** Accuracy (0.92) is essentially the base rate
 of always predicting "no default" (~91.9%), so it is not informative on its own —
 this is why the model is selected on ROC-AUC, not accuracy
 (`03_ML_REQUIREMENTS.md`: "Do not choose a model from accuracy alone"). At the
-default 0.5 threshold, recall is very low (0.0197: only 98 of 4,965 defaulters
+default 0.5 threshold, recall is very low (0.0179: only 89 of 4,965 defaulters
 flagged); the calibrated probabilities concentrate below 0.5 for this imbalanced
-target. ROC-AUC (0.7667) shows the model ranks risk meaningfully better than
-chance. `metrics.json` reports a `selected_threshold` of ≈ 0.161 chosen on the
-**validation** set (val F1 ≈ 0.345), whose test generalization is F1 ≈ 0.316
-(precision ≈ 0.258, recall ≈ 0.408), plus a full `threshold_analysis` table — the
+target. ROC-AUC (0.7615) shows the model ranks risk meaningfully better than
+chance. `metrics.json` reports a `selected_threshold` of ≈ 0.167 (0.1665) chosen on the
+**validation** set (val F1 ≈ 0.313 at that operating threshold), whose test generalization is F1 ≈ 0.315
+(precision ≈ 0.262, recall ≈ 0.395), plus a full `threshold_analysis` table — the
 operating threshold should be chosen deliberately for the use case, not left at 0.5.
 
-**Model selection (validation ROC-AUC)** — from `metrics.json.per_model_validation`:
+**Model selection (5-fold stratified cross-validation ROC-AUC on TRAIN+VAL)** —
+selection_basis `cross_validation_5fold_mean`, choosing the best mean ROC-AUC (std
+reported), from `metrics.json.per_model_cross_validation`:
 
-| Model | Validation ROC-AUC |
+| Model | 5-fold CV ROC-AUC (mean ± std) |
 |-------|--------------------|
-| Logistic Regression | 0.7419 |
-| Decision Tree | 0.7227 |
-| Random Forest | 0.7481 |
-| **XGBoost (selected)** | **0.7599** |
+| Logistic Regression | 0.7433 ± 0.0050 |
+| Decision Tree | 0.7250 ± 0.0049 |
+| Random Forest | 0.7498 ± 0.0049 |
+| **XGBoost (selected)** | **0.7571 ± 0.0047** |
 
-XGBoost was selected as the highest ROC-AUC on the validation split
-(`metadata.json.selection_metric = roc_auc`); it also had the highest validation
-PR-AUC (0.2433). No models were skipped (`metrics.json.skipped_models = []`).
+The single-split validation ROC-AUC is still reported as a head-to-head
+(`metrics.json.per_model_validation`; XGBoost 0.7566) but is no longer the
+selection basis.
 
-**Global feature importance** (XGBoost, `method: tree_feature_importances`) — top
-drivers of *predicted* risk (association, not causation), from
-`metrics.json.global_importance`: `EXT_SOURCE_MEAN` (0.105),
-`NAME_EDUCATION_TYPE_Higher education` (0.037), `CODE_GENDER_M` (0.034),
-`EXT_SOURCE_3` (0.027), `CODE_GENDER_F` (0.025), **`EXT_SOURCE_1_MISSING` (0.025)**,
-`NAME_EDUCATION_TYPE_Secondary / secondary special` (0.024), `EXT_SOURCE_2` (0.022),
-`CREDIT_GOODS_RATIO` (0.022), `NAME_CONTRACT_TYPE_Cash loans` (0.021),
-`NAME_INCOME_TYPE_Pensioner` (0.020), `FLAG_OWN_CAR_N` (0.020). The external-score
-family dominates, the *missingness* of `EXT_SOURCE_1` is itself a top feature, and
-`CODE_GENDER` appears prominently — the last point is a direct trigger for the
-fairness review noted under Known risks.
+XGBoost was selected by the highest mean ROC-AUC across a 5-fold stratified
+cross-validation on TRAIN+VAL (`metadata.json.selection_basis =
+cross_validation_5fold_mean`, `selection_metric = roc_auc`), not by the highest
+ROC-AUC on a single validation split; on that validation split it also had the
+highest PR-AUC (0.2380). No models were skipped
+(`metrics.json.skipped_models = []`).
+
+The selected XGBoost is **hyperparameter-tuned** (`metadata.json.hyperparameters_tuned
+= true`) via `RandomizedSearchCV` (n_iter 8 over a 40,000-row stratified subsample;
+XGBoost tuned CV ROC-AUC 0.7401 vs Random Forest 0.7371, from
+`metrics.json.hyperparameter_tuning`). The tuned parameters actually in use —
+`n_estimators: 300`, `max_depth: 4`, `learning_rate: 0.03`, `subsample: 0.7`,
+`colsample_bytree: 0.8` — override the `config/config.yaml` defaults
+(400 / 5 / 0.05 / 0.8 / 0.8); `scale_pos_weight` is still set from the train-split
+class balance.
+
+**Global feature importance** (XGBoost, `method: tree_feature_importances`,
+fold-averaged across the 3 calibration folds) — top drivers of *predicted* risk
+(association, not causation), from `metrics.json.global_importance`:
+`EXT_SOURCE_MEAN` (0.167), `EXT_SOURCE_3` (0.041),
+`NAME_EDUCATION_TYPE_Higher education` (0.035), `EXT_SOURCE_2` (0.035),
+`CODE_GENDER_M` (0.029), `CODE_GENDER_F` (0.027), **`EXT_SOURCE_3_MISSING` (0.027)**,
+`CREDIT_GOODS_RATIO` (0.025), `EXT_SOURCE_1_MISSING` (0.021). The external-score
+family dominates, the *missingness* of `EXT_SOURCE_3` is itself a top-ranked
+feature, and `CODE_GENDER` appears prominently — the last point is a direct
+trigger for the fairness review noted under Known risks.
 
 ## Calibration
 
 From `metadata.json.calibration` / `metrics.json.calibration`:
 
 - **Method:** isotonic regression, 3-fold CV (`config/config.yaml: calibration`).
-- **Brier score before calibration:** 0.1869
-- **Brier score after calibration:** 0.0672
+- **Brier score before calibration:** 0.1961
+- **Brier score after calibration:** 0.0675
 - **Improved:** yes.
 - Probabilities are adjusted toward observed frequencies; `metrics.json` stores
   the reliability curve before and after (`calibration.curve_before` /
@@ -175,13 +196,18 @@ there is weakly evidenced.
   tables are a documented offline/advanced extension and are not used here
   (`manifest.json.known_limitations`, `schema.py` scope note). This caps
   discrimination well below published multi-table Home Credit solutions (~0.79–0.80
-  ROC-AUC); ~0.767 here is the honest application-only baseline.
+  ROC-AUC); ~0.762 (test ROC-AUC 0.7615) is the honest application-only baseline.
 - **Low recall at default threshold.** At threshold 0.5 the model flags very few
-  positives (recall 0.0197); a use-case-appropriate threshold must be chosen (the
-  reported validation-selected point is ≈ 0.161).
+  positives (recall 0.0179); a use-case-appropriate threshold must be chosen (the
+  reported validation-selected point is ≈ 0.167, i.e. 0.1665).
 - **Sparse high-probability calibration bins** (see Calibration).
-- **No fairness/bias evaluation** has been performed (see Known risks), despite
-  `CODE_GENDER` ranking among the most important features.
+- **Fairness diagnostic only, no audit.** A per-group fairness **diagnostic** is
+  now shipped (`metrics.json.fairness`, sliced by `CODE_GENDER` and `AGE_BAND` at
+  the operating threshold ≈ 0.1665); it already surfaces disparities (e.g. male
+  selection rate ~0.177 vs female ~0.094). It is a screen for human review, **not**
+  a fairness certification or audit — no formal disparate-impact / equalized-odds
+  assessment or mitigation has been performed, despite `CODE_GENDER` ranking among
+  the most important features (see Known risks).
 
 ## Known risks
 
@@ -194,9 +220,12 @@ there is weakly evidenced.
 - **No invented adverse-action reasons.** The model does not, and must not be used
   to, generate reasons for denial or adverse-action notices.
 - **Concrete bias risk.** `CODE_GENDER_M` and `CODE_GENDER_F` are among the top
-  features by importance, and age/income proxies (e.g. `NAME_INCOME_TYPE_Pensioner`)
-  also appear. No bias or disparate-impact analysis has been run; do **not** assume
-  the model is fair across groups. A fairness audit is required before any real use.
+  features by importance. A fairness **diagnostic** (`metrics.json.fairness`) now
+  slices selection_rate, FNR, FPR, and ROC-AUC by `CODE_GENDER` and `AGE_BAND` at
+  the operating threshold and already flags disparities for review (e.g. male
+  selection rate ~0.177 vs female ~0.094). This is a diagnostic screen, **not** a
+  disparate-impact analysis or certification; do **not** assume the model is fair
+  across groups. A full fairness audit is still required before any real use.
 - **Distribution shift.** Trained on a static snapshot of the Home Credit
   population; performance on other populations or future time periods is unknown
   until re-evaluated.

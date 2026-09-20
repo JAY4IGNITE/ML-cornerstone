@@ -93,7 +93,7 @@ served `manifest_reference` is the basename only, never an absolute path):
   "model_name": "XGBoost",
   "model_version": "0.1.0",
   "model_key": "xgboost",
-  "trained_at": "2026-09-20T07:43:10Z",
+  "trained_at": "2026-09-20T11:58:50Z",
   "dataset_source": "real",
   "synthetic": false,
   "synthetic_warning": null,
@@ -102,8 +102,8 @@ served `manifest_reference` is the basename only, never an absolute path):
   "calibration": {
     "method": "isotonic",
     "cv": 3,
-    "brier_before": 0.18692637979984283,
-    "brier_after": 0.06722983139426303,
+    "brier_before": 0.19605588912963867,
+    "brier_after": 0.06750000869660358,
     "improved": true,
     "status": "calibrated (isotonic/sigmoid via CV); probabilities adjusted toward observed frequencies"
   },
@@ -236,10 +236,11 @@ Returns the full evaluation metrics from the last training run (the parsed
 `artifacts/metrics.json`). Returns `404 not_found` if the file is absent.
 
 Top-level keys include: `generated_at`, `dataset_source`, `synthetic`,
-`synthetic_warning`, `selection_metric`, `selected_model`, `split_diagnostics`,
-`validation_summary`, `per_model_validation`, `final_test_metrics`,
-`threshold_analysis`, `optimal_f1_threshold`, `calibration`, `global_importance`,
-`skipped_models`.
+`synthetic_warning`, `selection_metric`, `selection_basis`, `selected_model`,
+`split_diagnostics`, `validation_summary`, `per_model_validation`,
+`per_model_cross_validation`, `hyperparameter_tuning`, `final_test_metrics`,
+`threshold_analysis`, `selected_threshold`, `calibration`, `global_importance`,
+`permutation_importance`, `fairness`, `skipped_models`.
 
 ```bash
 curl http://127.0.0.1:8000/api/metrics
@@ -329,9 +330,9 @@ in real data and are imputed downstream); all other fields are **required**.
 
 | Field                    | Type            | Notes                                                     |
 | ------------------------ | --------------- | --------------------------------------------------------- |
-| `model_name`             | string          | e.g. `Random Forest`                                      |
+| `model_name`             | string          | e.g. `XGBoost`                                            |
 | `model_version`          | string          | e.g. `0.1.0`                                              |
-| `model_key`              | string \| null  | internal key, e.g. `random_forest`                        |
+| `model_key`              | string \| null  | internal key, e.g. `xgboost`                              |
 | `trained_at`             | string \| null  | ISO-8601 training timestamp                               |
 | `dataset_source`         | string          | `synthetic` or `real`                                     |
 | `synthetic`              | boolean         | true when trained on synthetic data                       |

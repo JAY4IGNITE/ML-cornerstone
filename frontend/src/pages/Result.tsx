@@ -2,13 +2,17 @@
 // band, model version, explanation availability, limitations and the
 // not-a-lending-decision disclaimer (06_FRONTEND_REQUIREMENTS.md).
 import { Link } from "react-router-dom";
+import { api } from "../lib/api";
 import { usePrediction } from "../store/prediction";
 import { Alert, Badge, Button, Card, StatCard } from "../components/ui";
-import { EmptyState } from "../components/states";
+import { EmptyState, useAsync } from "../components/states";
 import { pct, riskBandClass } from "../lib/format";
 
 export default function Result() {
   const { result } = usePrediction();
+  // Best-effort: surface the synthetic-data warning here too (this is where a
+  // human judges an applicant). Never blocks or crashes the page if it fails.
+  const { data: model } = useAsync(() => api.modelInfo().catch(() => null), []);
 
   if (!result) {
     return (
@@ -27,6 +31,13 @@ export default function Result() {
         <h1 className="text-xl font-semibold">Prediction Result</h1>
         <Badge className={riskBandClass(result.risk_band)}>{result.risk_band} risk</Badge>
       </div>
+
+      {model?.synthetic && (
+        <Alert tone="warning" title="Synthetic data">
+          {model.synthetic_warning ??
+            "This model was trained on synthetic data. Results are for demonstration only and must not inform real lending."}
+        </Alert>
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard label="Default probability" value={pct(prob, 1)} sub="Estimated P(default)" />
