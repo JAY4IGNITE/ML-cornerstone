@@ -1,0 +1,28 @@
+# Core runtime + ML + API dependencies (Python 3.11–3.13).
+# Heavy/optional accelerators (xgboost, shap) live in requirements-extras.txt so
+# the pipeline still runs and tests still pass if they cannot be installed.
+
+# --- data ---
+pandas>=2.2,<3
+numpy>=1.26,<3
+pyarrow>=15.0            # parquet for memory-aware intermediate storage
+
+# --- ml ---
+scikit-learn>=1.5,<2
+joblib>=1.4
+
+# --- config / validation ---
+PyYAML>=6.0
+pydantic>=2.7,<3
+pydantic-settings>=2.2
+
+# --- api ---
+fastapi>=0.111
+uvicorn[standard]>=0.30
+
+# --- plotting for evaluation report (calibration / PR curves) ---
+matplotlib>=3.8
+
+# --- testing ---
+pytest>=8.0
+httpx>=0.27             # FastAPI TestClient transport

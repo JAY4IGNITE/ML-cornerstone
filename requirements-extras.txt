@@ -1,0 +1,8 @@
+# Optional ML accelerators. Install with:
+#   pip install -r requirements-extras.txt
+# The pipeline detects these at runtime and degrades gracefully if absent:
+#   - xgboost missing  -> the XGBoost model is skipped (LR/DT/RF still train)
+#   - shap missing     -> SHAP local/global explanations fall back to model-native
+#                         importances / coefficients (still real, never fabricated)
+xgboost>=2.1
+shap>=0.46

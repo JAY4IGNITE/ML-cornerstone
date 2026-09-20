@@ -1,0 +1,245 @@
+{
+  "dataset_name": "Home Credit Default Risk",
+  "source_kind": "real",
+  "synthetic_warning": null,
+  "source_url": "https://www.kaggle.com/competitions/home-credit-default-risk",
+  "retrieval_or_generation_date": "2026-09-20T07:41:16Z",
+  "primary_file": "application_train.csv",
+  "license_and_usage": "Kaggle Home Credit Default Risk competition rules apply to the real data; must be accepted on Kaggle. Synthetic fixture: no license, internal use only.",
+  "row_count": 307511,
+  "column_count": 122,
+  "target_column": "TARGET",
+  "target_meaning": "TARGET=1: client with payment difficulties (late payment beyond the dataset-defined threshold on at least one of the first installments); TARGET=0: all other cases. Confirm against HomeCredit_columns_description.csv when using real data.",
+  "target_distribution": {
+    "0": 282686,
+    "1": 24825
+  },
+  "positive_rate": 0.0807,
+  "feature_descriptions": [
+    {
+      "name": "AMT_INCOME_TOTAL",
+      "kind": "numeric",
+      "meaning": "Total declared income of the client",
+      "unit": "currency",
+      "source": "application_train.csv"
+    },
+    {
+      "name": "AMT_CREDIT",
+      "kind": "numeric",
+      "meaning": "Credit amount of the loan",
+      "unit": "currency",
+      "source": "application_train.csv"
+    },
+    {
+      "name": "AMT_ANNUITY",
+      "kind": "numeric",
+      "meaning": "Loan annuity (periodic payment)",
+      "unit": "currency",
+      "source": "application_train.csv"
+    },
+    {
+      "name": "AMT_GOODS_PRICE",
+      "kind": "numeric",
+      "meaning": "Price of the goods for which the loan is granted",
+      "unit": "currency",
+      "source": "application_train.csv"
+    },
+    {
+      "name": "AGE_YEARS",
+      "kind": "numeric",
+      "meaning": "Client age in years. This IS the canonical model column; the raw file's DAYS_BIRTH (negative day-count) is converted to it once during ingestion, so training and serving share it.",
+      "unit": "years",
+      "source": "application_train.csv (derived from DAYS_BIRTH)"
+    },
+    {
+      "name": "EMPLOYMENT_YEARS",
+      "kind": "numeric",
+      "meaning": "Years employed at current job. Canonical model column derived once at ingestion from DAYS_EMPLOYED; the documented 365243 sentinel (pensioners/unemployed) becomes missing with a DAYS_EMPLOYED_MISSING indicator. Omit at serving for pensioners/unemployed -> flag set, value imputed.",
+      "unit": "years",
+      "source": "application_train.csv (derived from DAYS_EMPLOYED)"
+    },
+    {
+      "name": "CNT_FAM_MEMBERS",
+      "kind": "numeric",
+      "meaning": "Number of family members",
+      "unit": "count",
+      "source": "application_train.csv"
+    },
+    {
+      "name": "CNT_CHILDREN",
+      "kind": "numeric",
+      "meaning": "Number of children the client has",
+      "unit": "count",
+      "source": "application_train.csv"
+    },
+    {
+      "name": "EXT_SOURCE_1",
+      "kind": "numeric",
+      "meaning": "Normalized score from external data source 1",
+      "unit": "score 0-1",
+      "source": "application_train.csv"
+    },
+    {
+      "name": "EXT_SOURCE_2",
+      "kind": "numeric",
+      "meaning": "Normalized score from external data source 2",
+      "unit": "score 0-1",
+      "source": "application_train.csv"
+    },
+    {
+      "name": "EXT_SOURCE_3",
+      "kind": "numeric",
+      "meaning": "Normalized score from external data source 3",
+      "unit": "score 0-1",
+      "source": "application_train.csv"
+    },
+    {
+      "name": "REGION_POPULATION_RELATIVE",
+      "kind": "numeric",
+      "meaning": "Normalized population of the region where the client lives",
+      "unit": "ratio",
+      "source": "application_train.csv"
+    },
+    {
+      "name": "NAME_CONTRACT_TYPE",
+      "kind": "categorical",
+      "meaning": "Loan type: cash or revolving",
+      "unit": "category",
+      "source": "application_train.csv"
+    },
+    {
+      "name": "CODE_GENDER",
+      "kind": "categorical",
+      "meaning": "Gender of the client",
+      "unit": "category",
+      "source": "application_train.csv"
+    },
+    {
+      "name": "FLAG_OWN_CAR",
+      "kind": "categorical",
+      "meaning": "Whether the client owns a car",
+      "unit": "category",
+      "source": "application_train.csv"
+    },
+    {
+      "name": "FLAG_OWN_REALTY",
+      "kind": "categorical",
+      "meaning": "Whether the client owns real estate",
+      "unit": "category",
+      "source": "application_train.csv"
+    },
+    {
+      "name": "NAME_INCOME_TYPE",
+      "kind": "categorical",
+      "meaning": "Client's income source",
+      "unit": "category",
+      "source": "application_train.csv"
+    },
+    {
+      "name": "NAME_EDUCATION_TYPE",
+      "kind": "categorical",
+      "meaning": "Highest level of education achieved",
+      "unit": "category",
+      "source": "application_train.csv"
+    },
+    {
+      "name": "NAME_FAMILY_STATUS",
+      "kind": "categorical",
+      "meaning": "Family status of the client",
+      "unit": "category",
+      "source": "application_train.csv"
+    },
+    {
+      "name": "NAME_HOUSING_TYPE",
+      "kind": "categorical",
+      "meaning": "Housing situation of the client",
+      "unit": "category",
+      "source": "application_train.csv"
+    },
+    {
+      "name": "OCCUPATION_TYPE",
+      "kind": "categorical",
+      "meaning": "Occupation of the client (often missing in real data)",
+      "unit": "category",
+      "source": "application_train.csv"
+    }
+  ],
+  "missingness": {
+    "AMT_ANNUITY": 0.0,
+    "AMT_GOODS_PRICE": 0.0009,
+    "NAME_TYPE_SUITE": 0.0042,
+    "OWN_CAR_AGE": 0.6599,
+    "OCCUPATION_TYPE": 0.3135,
+    "CNT_FAM_MEMBERS": 0.0,
+    "EXT_SOURCE_1": 0.5638,
+    "EXT_SOURCE_2": 0.0021,
+    "EXT_SOURCE_3": 0.1983,
+    "APARTMENTS_AVG": 0.5075,
+    "BASEMENTAREA_AVG": 0.5852,
+    "YEARS_BEGINEXPLUATATION_AVG": 0.4878,
+    "YEARS_BUILD_AVG": 0.665,
+    "COMMONAREA_AVG": 0.6987,
+    "ELEVATORS_AVG": 0.533,
+    "ENTRANCES_AVG": 0.5035,
+    "FLOORSMAX_AVG": 0.4976,
+    "FLOORSMIN_AVG": 0.6785,
+    "LANDAREA_AVG": 0.5938,
+    "LIVINGAPARTMENTS_AVG": 0.6835,
+    "LIVINGAREA_AVG": 0.5019,
+    "NONLIVINGAPARTMENTS_AVG": 0.6943,
+    "NONLIVINGAREA_AVG": 0.5518,
+    "APARTMENTS_MODE": 0.5075,
+    "BASEMENTAREA_MODE": 0.5852,
+    "YEARS_BEGINEXPLUATATION_MODE": 0.4878,
+    "YEARS_BUILD_MODE": 0.665,
+    "COMMONAREA_MODE": 0.6987,
+    "ELEVATORS_MODE": 0.533,
+    "ENTRANCES_MODE": 0.5035,
+    "FLOORSMAX_MODE": 0.4976,
+    "FLOORSMIN_MODE": 0.6785,
+    "LANDAREA_MODE": 0.5938,
+    "LIVINGAPARTMENTS_MODE": 0.6835,
+    "LIVINGAREA_MODE": 0.5019,
+    "NONLIVINGAPARTMENTS_MODE": 0.6943,
+    "NONLIVINGAREA_MODE": 0.5518,
+    "APARTMENTS_MEDI": 0.5075,
+    "BASEMENTAREA_MEDI": 0.5852,
+    "YEARS_BEGINEXPLUATATION_MEDI": 0.4878,
+    "YEARS_BUILD_MEDI": 0.665,
+    "COMMONAREA_MEDI": 0.6987,
+    "ELEVATORS_MEDI": 0.533,
+    "ENTRANCES_MEDI": 0.5035,
+    "FLOORSMAX_MEDI": 0.4976,
+    "FLOORSMIN_MEDI": 0.6785,
+    "LANDAREA_MEDI": 0.5938,
+    "LIVINGAPARTMENTS_MEDI": 0.6835,
+    "LIVINGAREA_MEDI": 0.5019,
+    "NONLIVINGAPARTMENTS_MEDI": 0.6943,
+    "NONLIVINGAREA_MEDI": 0.5518,
+    "FONDKAPREMONT_MODE": 0.6839,
+    "HOUSETYPE_MODE": 0.5018,
+    "TOTALAREA_MODE": 0.4827,
+    "WALLSMATERIAL_MODE": 0.5084,
+    "EMERGENCYSTATE_MODE": 0.474,
+    "OBS_30_CNT_SOCIAL_CIRCLE": 0.0033,
+    "DEF_30_CNT_SOCIAL_CIRCLE": 0.0033,
+    "OBS_60_CNT_SOCIAL_CIRCLE": 0.0033,
+    "DEF_60_CNT_SOCIAL_CIRCLE": 0.0033,
+    "DAYS_LAST_PHONE_CHANGE": 0.0,
+    "AMT_REQ_CREDIT_BUREAU_HOUR": 0.135,
+    "AMT_REQ_CREDIT_BUREAU_DAY": 0.135,
+    "AMT_REQ_CREDIT_BUREAU_WEEK": 0.135,
+    "AMT_REQ_CREDIT_BUREAU_MON": 0.135,
+    "AMT_REQ_CREDIT_BUREAU_QRT": 0.135,
+    "AMT_REQ_CREDIT_BUREAU_YEAR": 0.135
+  },
+  "known_limitations": [
+    "Serving subset uses application-level features only; supporting tables (bureau, previous_application, ...) are an offline/advanced extension and not required for a single real-time prediction.",
+    "DAYS_EMPLOYED uses the documented 365243 sentinel for pensioners/unemployed; treated as missing with an indicator."
+  ],
+  "validation_summary": {
+    "pass": 10,
+    "warn": 1,
+    "fail": 0
+  }
+}
