@@ -1,7 +1,7 @@
-"""Service layer between FastAPI and the ML artifacts.
+"""Service layer between the Streamlit UI and the ML artifacts.
 
-Loads the fitted pipeline + metadata + feature schema ONCE at startup and never
-retrains (05_API_CONTRACT.md). Converts a validated ApplicantInput into the
+Loads the fitted pipeline + metadata + feature schema ONCE (cached per process)
+and never retrains. Converts a validated ApplicantInput into the
 exact canonical model frame the training pipeline expects — including the
 missingness indicators the API caller does not supply directly
 (DAYS_EMPLOYED_MISSING for pensioners/unemployed, and one flag per EXT_SOURCE

@@ -1,13 +1,13 @@
-# Local demo stack: FastAPI backend (trains on synthetic data at first run) +
-# nginx-served React frontend. NOT a production deployment — no TLS, no auth,
-# no persistence. See docs/RESPONSIBLE_USE.md.
+# Local demo stack: a single Streamlit service that trains on synthetic data at
+# first run and serves the app (the model is imported directly, no API). NOT a
+# production deployment — no TLS, no auth, no persistence. See docs/RESPONSIBLE_USE.md.
 services:
-  backend:
+  app:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - "8501:8501"
     environment:
       # Point at a config override or flip dataset.source via a mounted config.
       LOAN_RISK_CONFIG: /app/config/config.yaml
@@ -17,18 +17,8 @@ services:
       - ./data:/app/data
       - ./reports:/app/reports
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health').status==200 else 1)"]
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8501/_stcore/health').status==200 else 1)"]
       interval: 15s
       timeout: 5s
       retries: 10
       start_period: 120s   # allow first-run training to finish
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    ports:
-      - "5173:80"
-    depends_on:
-      backend:
-        condition: service_healthy

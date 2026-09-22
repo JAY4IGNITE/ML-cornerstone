@@ -1,12 +1,12 @@
-"""Pydantic request/response schemas (05_API_CONTRACT.md).
+"""Applicant input model + validation (single source of truth for the form).
 
 The applicant request model is built DYNAMICALLY from loan_risk.schema so the
-API validation, the ML feature schema and the frontend form never drift apart.
-Numeric bounds and categorical enums come straight from FeatureSpec.
+input validation, the ML feature schema and the Streamlit form never drift
+apart. Numeric bounds and categorical enums come straight from FeatureSpec.
 
 Inputs are the canonical model columns directly: training derives AGE_YEARS /
 EMPLOYMENT_YEARS from the raw DAYS_* fields once in ingestion.standardize, and
-the API caller supplies those human-friendly columns as-is, so train and serve
+the caller supplies those human-friendly columns as-is, so train and serve
 share one schema. EMPLOYMENT_YEARS is optional — omitting it marks the applicant
 as a pensioner/unemployed (the DAYS_EMPLOYED_MISSING indicator is set and the
 value imputed), matching the 365243 sentinel handling on the training side.
@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field, create_model, field_validator
+from pydantic import BaseModel, Field, ValidationError, create_model, field_validator
 
 from loan_risk.schema import (
     CATEGORICAL_FEATURES,
@@ -83,73 +83,21 @@ def _build_applicant_model() -> type[BaseModel]:
 ApplicantInput = _build_applicant_model()
 
 
-class HealthResponse(BaseModel):
-    status: str = Field(examples=["ok"])
-    model_available: bool
-    api_version: str
-    detail: str
+def validate_payload(payload: dict[str, Any]) -> tuple[Optional[dict[str, Any]], list[dict[str, str]]]:
+    """Validate a raw form payload against ApplicantInput.
 
-
-class CalibrationInfo(BaseModel):
-    method: Optional[str] = None
-    brier_before: Optional[float] = None
-    brier_after: Optional[float] = None
-    improved: Optional[bool] = None
-    status: Optional[str] = None
-
-
-class ModelInfoResponse(BaseModel):
-    model_name: str
-    model_version: str
-    model_key: Optional[str] = None
-    trained_at: Optional[str] = None
-    dataset_source: str
-    synthetic: bool
-    synthetic_warning: Optional[str] = None
-    manifest_reference: Optional[str] = None
-    feature_schema_version: str
-    calibration: CalibrationInfo
-    selection_metric: Optional[str] = None
-    responsible_use_note: str
-
-    model_config = {"protected_namespaces": ()}
-
-
-class ValidationResponse(BaseModel):
-    valid: bool
-    normalized_fields: Optional[dict[str, Any]] = None
-    errors: list[dict[str, Any]] = Field(default_factory=list)
-
-
-class Contribution(BaseModel):
-    feature: str
-    contribution: float
-    direction: str
-
-
-class ExplanationBlock(BaseModel):
-    method: str
-    interpretation: Optional[str] = None
-    note: Optional[str] = None
-    contributions: list[Contribution] = Field(default_factory=list)
-
-
-class PredictResponse(BaseModel):
-    prediction_id: Optional[str] = None
-    default_probability: float = Field(ge=0.0, le=1.0)
-    risk_score: int = Field(ge=0, le=100)
-    risk_band: str
-    model_version: str
-    explanation_available: bool
-    explanation: Optional[ExplanationBlock] = None
-    limitations: list[str]
-    disclaimer: str
-
-    model_config = {"protected_namespaces": ()}
-
-
-class ErrorResponse(BaseModel):
-    """Consistent error schema — no stack traces or internal paths exposed."""
-    error: str
-    detail: str
-    fields: Optional[list[dict[str, Any]]] = None
+    Returns (normalized_fields, errors). On success `errors` is empty and
+    normalized_fields is the coerced/validated dict ready for ModelService.predict.
+    On failure normalized_fields is None and each error is {field, message}.
+    Mirrors the old API validate-input endpoint so the UI can surface
+    field-level problems the same way the pipeline expects them.
+    """
+    try:
+        model = ApplicantInput(**payload)
+    except ValidationError as exc:
+        errors = [
+            {"field": ".".join(str(p) for p in e["loc"]), "message": e["msg"]}
+            for e in exc.errors()
+        ]
+        return None, errors
+    return model.model_dump(), []

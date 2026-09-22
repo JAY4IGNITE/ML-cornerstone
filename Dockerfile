@@ -1,5 +1,5 @@
-# Backend + ML pipeline image. Multi-purpose: trains on synthetic data at first
-# run (if no artifacts are mounted) and serves the FastAPI app.
+# Streamlit + ML pipeline image. Multi-purpose: trains on synthetic data at first
+# run (if no artifacts are mounted) and serves the Streamlit app.
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
@@ -20,7 +20,8 @@ RUN pip install --upgrade pip && \
 
 # Copy source and install the package.
 COPY loan_risk ./loan_risk
-COPY backend ./backend
+COPY ui ./ui
+COPY streamlit_app.py ./streamlit_app.py
 COPY config ./config
 COPY docker/entrypoint.sh ./docker/entrypoint.sh
 RUN pip install -e . && chmod +x docker/entrypoint.sh
@@ -29,5 +30,6 @@ RUN pip install -e . && chmod +x docker/entrypoint.sh
 RUN useradd --create-home appuser && chown -R appuser:appuser /app
 USER appuser
 
-EXPOSE 8000
+EXPOSE 8501
 ENTRYPOINT ["./docker/entrypoint.sh"]
+CMD ["streamlit", "run", "streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"]

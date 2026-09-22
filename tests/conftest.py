@@ -3,8 +3,7 @@
 Fixtures reuse the existing synthetic fixture and the trained artifacts
 (read-only) so tests are fast. Everything is session-scoped and, if the
 synthetic data or artifacts are missing, builds them exactly once; fixtures that
-need a loaded model depend on ``trained_model`` so training always precedes the
-first import of backend.main.
+need a loaded model depend on ``trained_model`` so training always runs first.
 """
 from __future__ import annotations
 
@@ -19,9 +18,9 @@ import pytest
 import yaml
 
 # ---------------------------------------------------------------------------
-# Hermetic test configuration (must run before anything imports the config or
-# the backend app, so it lives at conftest import time — pytest imports conftest
-# before collecting/importing any test module).
+# Hermetic test configuration (must run before anything imports the config, so
+# it lives at conftest import time — pytest imports conftest before
+# collecting/importing any test module).
 #
 # The shipped config/config.yaml sets `dataset.source: real`, but the real Kaggle
 # `application_train.csv` is git-ignored, absent on a clean clone, and gated
@@ -31,9 +30,9 @@ import yaml
 # demand) and (b) redirects every writable path (artifacts, reports, data,
 # manifest) into an isolated temp directory. This makes the suite independent of
 # the real dataset AND non-destructive: it never reads or clobbers a real trained
-# model the developer may already have in ./artifacts. The backend app also calls
-# load_config(), so pointing LOAN_RISK_CONFIG at this file keeps the model the API
-# serves consistent with the config the tests assert against.
+# model the developer may already have in ./artifacts. The serving layer also
+# calls load_config(), so pointing LOAN_RISK_CONFIG at this file keeps the model
+# it loads consistent with the config the tests assert against.
 # ---------------------------------------------------------------------------
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _TMP_ROOT = Path(tempfile.mkdtemp(prefix="loan_risk_tests_"))
@@ -71,7 +70,7 @@ load_config.cache_clear()
 
 @pytest.fixture(scope="session")
 def cfg():
-    """The hermetic, synthetic-backed config every test and the backend share."""
+    """The hermetic, synthetic-backed config shared by every test."""
     return load_config()
 
 
@@ -97,18 +96,6 @@ def trained_model(cfg):
         from loan_risk.pipeline.run import train
         train(cfg)
     return artifacts.load_model(cfg)
-
-
-@pytest.fixture(scope="session")
-def api_client(trained_model):
-    """FastAPI TestClient. Depends on ``trained_model`` so the artifacts exist
-    BEFORE backend.main is imported — the app builds its ModelService (which
-    loads the model) at import time, so training must happen first regardless of
-    the order tests request fixtures."""
-    from fastapi.testclient import TestClient
-
-    from backend.main import app
-    return TestClient(app)
 
 
 @pytest.fixture()

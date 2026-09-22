@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Container entrypoint: ensure a trained model exists, then serve the API.
+# Container entrypoint: ensure a trained model exists, then serve the Streamlit app.
 #
 # First-run training logic:
 #   * If a model artifact is already present, skip training and just serve.
@@ -48,5 +48,5 @@ else
   echo "[entrypoint] Found existing model artifact — skipping training."
 fi
 
-echo "[entrypoint] Starting API on 0.0.0.0:8000"
-exec uvicorn backend.main:app --host 0.0.0.0 --port 8000
+echo "[entrypoint] Starting Streamlit on 0.0.0.0:8501"
+exec streamlit run streamlit_app.py --server.port=8501 --server.address=0.0.0.0

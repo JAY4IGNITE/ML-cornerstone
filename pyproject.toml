@@ -15,7 +15,7 @@ authors = [{ name = "ML Cornerstone" }]
 # upper bounds where needed) so an editable `pip install -e .` works standalone.
 # These are ranges, not pinned/locked versions, so they do not by themselves
 # guarantee byte-for-byte reproducible installs. The requirements*.txt files hold
-# the fuller install set: requirements.txt (core runtime/ML/API) and
+# the fuller install set: requirements.txt (core runtime/ML/Streamlit app) and
 # requirements-extras.txt (optional xgboost/shap accelerators).
 dependencies = [
     "pandas>=2.2,<3",
@@ -26,14 +26,13 @@ dependencies = [
     "PyYAML>=6.0",
     "pydantic>=2.7,<3",
     "pydantic-settings>=2.2",
-    "fastapi>=0.111",
-    "uvicorn[standard]>=0.30",
+    "streamlit>=1.36,<2",
     "matplotlib>=3.8",
 ]
 
 [project.optional-dependencies]
 extras = ["xgboost>=2.1", "shap>=0.46"]
-test = ["pytest>=8.0", "httpx>=0.27"]
+test = ["pytest>=8.0"]
 
 [project.scripts]
 loan-risk-synth = "loan_risk.data.synthetic:main"
