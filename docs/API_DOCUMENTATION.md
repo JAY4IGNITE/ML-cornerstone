@@ -1,5 +1,14 @@
 # API Documentation — Loan Default Risk API
 
+> **Historical reference — the REST API has been removed.** The project now ships
+> a single Streamlit app that imports the model in-process through
+> `loan_risk.serving.ModelService`; there is no FastAPI service, no `uvicorn`
+> server, and no HTTP endpoints. This document is retained to describe the former
+> HTTP contract and the response shapes (`default_probability`, `risk_score`,
+> `risk_band`, `limitations`, `disclaimer`) that the serving layer still produces
+> and the Streamlit UI renders. To run the app, see **Running the app** in the
+> [README](../README.md). The endpoint and URL details below no longer apply.
+
 FastAPI service that estimates the **probability of loan default** for a single
 applicant. Every output is an **analytical estimate, not an autonomous lending
 decision**.

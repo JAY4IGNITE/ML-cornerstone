@@ -5,8 +5,8 @@ Everything downstream derives from this module:
   * data validation (required columns, dtypes, bounds, allowed values)
   * preprocessing (numeric vs categorical routing)
   * feature engineering (engineered feature definitions + leakage notes)
-  * backend Pydantic request models (bounds + categorical enums)
-  * frontend form fields (labels, units, options)
+  * serving-layer Pydantic input models (bounds + categorical enums)
+  * the Streamlit form fields (labels, units, options)
 
 Scope decision (see project memory / DATA_DICTIONARY.md):
 We serve an *application-level* subset of the real Home Credit

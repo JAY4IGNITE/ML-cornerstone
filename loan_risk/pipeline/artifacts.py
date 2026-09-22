@@ -4,13 +4,13 @@ Saves to paths.artifacts:
   * model.joblib          -> the fitted (calibrated) end-to-end pipeline
   * metadata.json         -> model name/version, calibration, training info,
                              selection metric, dataset manifest reference
-  * feature_schema.json   -> the exact inputs the API expects (from schema.py),
-                             so backend validation + frontend form derive from
-                             one machine-readable source
+  * feature_schema.json   -> the exact inputs the model expects (from schema.py),
+                             so serving-layer validation + the Streamlit form
+                             derive from one machine-readable source
   * metrics.json          -> full evaluation results (written by run.py)
 
-The backend loads model.joblib + metadata.json + feature_schema.json at startup;
-it NEVER retrains (05_API_CONTRACT.md).
+The serving layer (ModelService) loads model.joblib + metadata.json +
+feature_schema.json once, cached; it NEVER retrains.
 """
 from __future__ import annotations
 

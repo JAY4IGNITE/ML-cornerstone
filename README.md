@@ -2,8 +2,8 @@
 
 A config-driven machine-learning system that estimates the **probability that a
 loan applicant will experience repayment difficulty (default)**. It pairs a
-scikit-learn training pipeline with a FastAPI prediction service and a React
-dashboard.
+scikit-learn training pipeline with a single Streamlit application that loads the
+trained model directly (no HTTP layer).
 
 > **This is a default-risk estimator, not a loan-approval engine.** It predicts
 > repayment difficulty; it does **not** decide whether a loan should be granted,
@@ -30,8 +30,7 @@ dashboard.
 - [Dataset acquisition](#dataset-acquisition)
 - [Training](#training)
 - [Evaluation](#evaluation)
-- [API startup](#api-startup)
-- [Frontend startup](#frontend-startup)
+- [Running the app](#running-the-app)
 - [Deployment (Docker)](#deployment-docker)
 - [Testing](#testing)
 - [Responsible use](#responsible-use)
@@ -71,10 +70,11 @@ The system is built in four layers, all deriving from a single feature contract.
 
 One module defines every input column — its type, bounds, allowed categories,
 missing-value behavior, and engineered-feature formulas. Synthetic-data
-generation, data validation, preprocessing, the backend Pydantic models, and the
-frontend form all derive from it, so they cannot drift apart. Training persists
-this contract as a machine-readable `artifacts/feature_schema.json`, which the
-API serves at `GET /api/feature-schema`.
+generation, data validation, preprocessing, the serving-layer Pydantic validation
+models, and the Streamlit form all derive from it, so they cannot drift apart.
+Training persists this contract as a machine-readable
+`artifacts/feature_schema.json`, which the app reads through
+`ModelService.get_feature_schema()`.
 
 ### Data layer (`loan_risk/data/`)
 
@@ -98,24 +98,26 @@ Supporting modules cover preprocessing, feature engineering, splitting, model
 specs, calibration, evaluation, explainability (SHAP with graceful fallback), and
 the risk-score mapping.
 
-### FastAPI backend (`backend/`)
+### Serving layer (`loan_risk/serving/`)
 
-Loads the fitted pipeline, metadata, and feature schema **once at startup** and
-never retrains during a request. `schemas.py` builds the applicant request model
-dynamically from `loan_risk/schema.py` (bounds + categorical enums). Errors use a
-consistent schema and never leak stack traces or internal paths. Full details:
-[`docs/API_DOCUMENTATION.md`](docs/API_DOCUMENTATION.md).
+Framework-agnostic model access, imported directly by the UI (no HTTP layer).
+`ModelService` loads the fitted pipeline, metadata, and feature schema **once**
+(cached) and never retrains during a prediction. `validation.py` builds the
+applicant input model dynamically from `loan_risk/schema.py` (bounds + categorical
+enums) and exposes `validate_payload()` as the authoritative input check.
 
-### React frontend (`frontend/`)
+### Streamlit app (`streamlit_app.py` + `ui/`)
 
-A React + Vite + TypeScript + Tailwind dashboard. During development it runs on
-port `5173` and proxies `/api` to the backend at `http://127.0.0.1:8000`, so the
-two run side by side with no CORS friction.
+A single Streamlit multipage app. `streamlit_app.py` sets up the page chrome and
+`st.navigation`; the eight pages live in `ui/pages/`, with shared rendering
+helpers in `ui/helpers.py` and a per-session prediction store in `ui/state.py`.
+The UI imports `loan_risk.serving.ModelService` directly and calls it in-process —
+there is no network boundary between the interface and the model.
 
 ### Config-driven design (`config/config.yaml`)
 
-Nothing that varies — paths, seeds, thresholds, hyperparameters, risk bands, CORS
-origins, the dataset source — is hardcoded in logic. `loan_risk/config.py` loads
+Nothing that varies — paths, seeds, thresholds, hyperparameters, risk bands,
+the dataset source — is hardcoded in logic. `loan_risk/config.py` loads
 `config/config.yaml` by default, or a file pointed to by the `LOAN_RISK_CONFIG`
 environment variable.
 
@@ -130,40 +132,33 @@ ml-cornerstone/
 │   └── config.yaml                 # central configuration (paths, seeds, models, bands)
 ├── loan_risk/                      # Python package: ML pipeline + shared schema
 │   ├── config.py                   # YAML config loader (single source of truth)
-│   ├── schema.py                   # feature contract shared by data / ML / API / frontend
+│   ├── schema.py                   # feature contract shared by data / ML / serving / UI
 │   ├── data/
 │   │   ├── synthetic.py            # synthetic Home Credit-shaped generator
 │   │   ├── download.py             # real Kaggle dataset acquisition
 │   │   ├── ingestion.py            # raw file -> canonical model frame
 │   │   ├── validate.py             # data-validation checks + report
 │   │   └── manifest.py             # dataset manifest builder
-│   └── pipeline/
-│       ├── preprocess.py           # numeric/categorical ColumnTransformer
-│       ├── features.py             # engineered feature definitions
-│       ├── split.py                # reproducible stratified split
-│       ├── models.py               # model specs (LR / DecisionTree / RF / XGBoost)
-│       ├── calibrate.py            # probability calibration
-│       ├── evaluate.py             # metrics, threshold + calibration analysis
-│       ├── explain.py              # global + local explainability (SHAP w/ fallback)
-│       ├── risk_score.py           # probability -> score / band mapping
-│       ├── artifacts.py            # model / metadata / schema / metrics persistence
-│       └── run.py                  # training orchestrator (entrypoint)
-├── backend/                        # FastAPI prediction service
-│   ├── main.py                     # app, routes, consistent error handlers
-│   ├── schemas.py                  # Pydantic request/response models (built from schema.py)
-│   └── service.py                  # model loading + prediction service layer
-├── frontend/                       # React + Vite + TypeScript dashboard
-│   ├── package.json
-│   ├── vite.config.ts              # dev server :5173, proxies /api -> :8000
-│   ├── Dockerfile                  # build the Vite bundle, serve via nginx
-│   ├── nginx.conf                  # SPA routing + /api proxy to backend:8000
-│   ├── index.html
-│   └── src/
-│       ├── main.tsx / App.tsx / index.css
-│       ├── components/             # Layout, ui, states
-│       ├── lib/                    # api client, types, formatters
-│       ├── pages/                  # 8 pages: Overview, Assessment, Result, Explainability, Performance, DatasetQuality, ModelInfo, ResponsibleUse
-│       └── store/                  # prediction context
+│   ├── pipeline/
+│   │   ├── preprocess.py           # numeric/categorical ColumnTransformer
+│   │   ├── features.py             # engineered feature definitions
+│   │   ├── split.py                # reproducible stratified split
+│   │   ├── models.py               # model specs (LR / DecisionTree / RF / XGBoost)
+│   │   ├── calibrate.py            # probability calibration
+│   │   ├── evaluate.py             # metrics, threshold + calibration analysis
+│   │   ├── explain.py              # global + local explainability (SHAP w/ fallback)
+│   │   ├── risk_score.py           # probability -> score / band mapping
+│   │   ├── artifacts.py            # model / metadata / schema / metrics persistence
+│   │   └── run.py                  # training orchestrator (entrypoint)
+│   └── serving/                    # framework-agnostic serving (imported by the UI)
+│       ├── service.py              # ModelService: model loading + prediction
+│       └── validation.py           # dynamic Pydantic input model + validate_payload
+├── ui/                             # Streamlit interface
+│   ├── helpers.py                  # cached service accessor + shared render helpers
+│   ├── state.py                    # per-session prediction store
+│   └── pages/                      # overview, assessment, result, explainability,
+│                                   #   performance, dataset_quality, model_info, responsible_use
+├── streamlit_app.py                # Streamlit entry point (page chrome + st.navigation)
 ├── artifacts/                      # trained pipeline + metadata (git-ignored; regenerated)
 │   ├── model.joblib
 │   ├── metadata.json
@@ -183,13 +178,12 @@ ml-cornerstone/
 │   └── RESPONSIBLE_USE.md
 ├── tests/
 │   ├── conftest.py
-│   ├── test_api.py                 # API contract + error-leak tests
 │   ├── test_data.py                # ingestion / validation / manifest tests
 │   └── test_ml.py                  # split, preprocessing, pipeline tests
 ├── docker/
 │   └── entrypoint.sh               # first-run train (synthetic fallback) then serve
-├── Dockerfile                      # backend + ML pipeline image
-├── docker-compose.yml              # local stack: backend :8000 + nginx frontend :5173
+├── Dockerfile                      # Streamlit + ML pipeline image
+├── docker-compose.yml              # local stack: single Streamlit app on :8501
 ├── dataset.py                      # standalone kagglehub download helper
 ├── pyproject.toml
 ├── requirements.txt
@@ -214,8 +208,8 @@ pip install -e .
 ```
 
 `requirements.txt` covers the core runtime (pandas, numpy, pyarrow,
-scikit-learn, joblib, PyYAML, pydantic, FastAPI, uvicorn, matplotlib) plus the
-test tooling (pytest, httpx). `pip install -e .` installs the `loan_risk` package
+scikit-learn, joblib, PyYAML, pydantic, Streamlit, matplotlib) plus the
+test tooling (pytest). `pip install -e .` installs the `loan_risk` package
 in editable mode and registers three console scripts:
 
 | Console script         | Equivalent module command                 |
@@ -300,7 +294,7 @@ It writes these artifacts into `artifacts/`:
 | ----------------------------- | --------------------------------------------------------------------- |
 | `model.joblib`                | the fitted, calibrated end-to-end pipeline (the serving contract)     |
 | `metadata.json`               | model name/version, training timestamp, dataset source, calibration   |
-| `feature_schema.json`         | the exact input contract the API and frontend derive from             |
+| `feature_schema.json`         | the exact input contract serving and the UI derive from               |
 | `metrics.json`                | full evaluation results (per-model validation + 5-fold CV, hyperparameter tuning, test, threshold, calibration, global + permutation importance, fairness diagnostic) |
 
 It also refreshes `data/manifest.json` and `reports/validation_report.json`.
@@ -343,73 +337,55 @@ the auxiliary bureau/previous-application tables; ~0.762 here is the honest
 application-only baseline. Full narrative:
 [`docs/EVALUATION_REPORT.md`](docs/EVALUATION_REPORT.md).
 
-## API startup
+## Running the app
 
-Start the FastAPI service (loads the trained artifacts at startup):
-
-```bat
-uvicorn backend.main:app --reload --port 8000
-```
-
-- Interactive OpenAPI docs: `http://127.0.0.1:8000/docs`
-- Health check: `http://127.0.0.1:8000/api/health`
-
-If no trained model is present, `GET /api/health` reports `degraded` and
-`GET /api/model/info` and `POST /api/predict` return `503 model_unavailable` —
-train the pipeline first. Full endpoint, schema, and error reference:
-[`docs/API_DOCUMENTATION.md`](docs/API_DOCUMENTATION.md).
-
-## Frontend startup
+The interface is a single Streamlit app that imports the trained model directly —
+there is no separate API server to start. Launch it from the repo root:
 
 ```bat
-cd frontend
-npm install
-npm run dev
+streamlit run streamlit_app.py
 ```
 
-The dev server runs on `http://localhost:5173` and proxies `/api` requests to the
-backend at `http://127.0.0.1:8000`, so start the backend first. Other scripts:
-`npm run build` (`tsc --noEmit && vite build`) and `npm run typecheck`
-(`tsc --noEmit`).
+Streamlit serves the app at `http://localhost:8501` and opens it in your browser.
+The app loads the model once (cached) via `loan_risk.serving.ModelService`; if no
+trained model is present it degrades gracefully — the Overview page shows a
+"Model not ready" status and the pages that need a model prompt you to train the
+pipeline first, rather than erroring.
 
-The dashboard has eight pages, all present in `frontend/src/pages/`: Overview,
-Assessment, Result, Explainability, Performance, Dataset Quality, Model Info, and
-Responsible Use (routed in `frontend/src/App.tsx`). The API client, shared
-components, types, and prediction store are in place.
+The dashboard has eight pages, all defined in `ui/pages/` and wired up with
+`st.navigation` in `streamlit_app.py`: Overview, Risk Assessment, Prediction
+Result, Explainability, Model Performance, Dataset Quality, Model Information, and
+Responsible Use. The applicant form is generated from the feature schema, the
+prediction store lives in `st.session_state`, and shared rendering helpers are in
+`ui/helpers.py`.
 
 ## Deployment (Docker)
 
-A `docker-compose.yml` brings up the full local stack — the FastAPI backend and
-the nginx-served React frontend — with one command:
+A `docker-compose.yml` brings up the app as a single container with one command:
 
 ```bat
 docker compose up --build
 ```
 
 This is a **local demo stack, not a production deployment**: no TLS, no auth, no
-persistence guarantees. Two services come up:
+persistence guarantees. One service comes up:
 
-- **`backend`** — the `Dockerfile` image (Python + ML pipeline + FastAPI),
-  published on `http://localhost:8000`. Its `docker/entrypoint.sh` runs on start:
-  if a trained `artifacts/model.joblib` already exists it serves it directly;
-  otherwise it trains first. When no artifact **and** no real-data CSV
+- **`app`** — the `Dockerfile` image (Python + ML pipeline + Streamlit), published
+  on `http://localhost:8501`. Its `docker/entrypoint.sh` runs on start: if a
+  trained `artifacts/model.joblib` already exists it serves it directly; otherwise
+  it trains first. When no artifact **and** no real-data CSV
   (`data/raw/application_train.csv`) are present, it forces training on the
   **synthetic** fixture via a generated `LOAN_RISK_CONFIG` override (so a fresh
   clone starts cleanly without the real Kaggle data). If a real-data CSV is
   mounted, it trains on the configured source (`real`) instead. `artifacts/`,
   `data/`, and `reports/` are mounted from the host so trained models and
   generated data persist between runs.
-- **`frontend`** — the `frontend/Dockerfile` image builds the Vite bundle and
-  serves it with nginx (container port `80`, published on `http://localhost:5173`).
-  `frontend/nginx.conf` handles SPA routing and proxies `/api` to the backend
-  service, so no CORS configuration is needed.
 
-Startup is **health-gated**: the backend exposes a `/api/health` healthcheck with
-a long `start_period` to allow first-run training to finish, and the frontend
-`depends_on` the backend being healthy before it starts. To serve a real-data
-model, either mount pre-trained artifacts into `artifacts/` or place
-`application_train.csv` under `data/raw/` (see [Dataset acquisition](#dataset-acquisition))
-before bringing the stack up.
+Startup is **health-gated**: the container exposes Streamlit's `/_stcore/health`
+endpoint as its healthcheck with a long `start_period` to allow first-run training
+to finish. To serve a real-data model, either mount pre-trained artifacts into
+`artifacts/` or place `application_train.csv` under `data/raw/`
+(see [Dataset acquisition](#dataset-acquisition)) before bringing the stack up.
 
 ## Testing
 
@@ -421,12 +397,6 @@ configured source). Run it with the virtual environment's interpreter:
 .venv\Scripts\python -m pytest
 ```
 
-- `tests/test_api.py` — the API testing checklist: health, model info, a valid
-  prediction, invalid category, missing required field, out-of-bounds numeric,
-  optional-field omission, the consistent error-response schema for both the 422
-  (validation) and 500 (internal-error) paths (asserting no tracebacks or
-  filesystem paths leak), `validate-input`, and the metrics, feature-schema, and
-  dataset-quality support endpoints.
 - `tests/test_data.py` — ingestion, standardization, validation, and manifest.
 - `tests/test_ml.py` — the reproducible stratified split (including
   stratification-preserves-positive-rate and no-ID-leakage-across-splits
@@ -443,8 +413,8 @@ configured source). Run it with the virtual environment's interpreter:
   modeled risk, not a certain outcome. Feature importance describes association,
   **not** causation, and the system does not invent adverse-action reasons.
 - **Real data, honest labeling.** The shipped model is trained on the real Kaggle
-  data (`synthetic: false` in `GET /api/model/info`). If you switch back to the
-  synthetic fixture, the API advertises it honestly (`synthetic: true`, plus a
+  data (`synthetic: false` in `ModelService.model_info()`). If you switch back to
+  the synthetic fixture, the app surfaces it honestly (`synthetic: true`, plus a
   synthetic warning prepended to prediction `limitations`).
 - **Scope limits.** The served model uses an application-level feature subset and
   does not use full credit-bureau history, which caps discrimination below
@@ -452,8 +422,8 @@ configured source). Run it with the virtual environment's interpreter:
   compliance guarantees; **no fairness analysis has been performed**, and
   `CODE_GENDER` is among the most important features — see
   [`docs/RESPONSIBLE_USE.md`](docs/RESPONSIBLE_USE.md).
-- **Privacy.** The service does not log raw applicant PII, and error responses
-  never expose stack traces or internal paths.
+- **Privacy.** The app does not log raw applicant PII and does not persist
+  submitted applicant data beyond the current browser session.
 
 See [`docs/RESPONSIBLE_USE.md`](docs/RESPONSIBLE_USE.md),
 [`docs/MODEL_CARD.md`](docs/MODEL_CARD.md) and the spec files
