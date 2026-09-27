@@ -23,6 +23,7 @@ from ui.helpers import (
 # Signposts to the other pages (title, one-line description). Rendered as a grid
 # of bordered cards; kept as data so the layout stays a simple loop.
 _EXPLORE = [
+    ("Analytics Dashboard", "Business metrics and data distributions across the applicant pool."),
     ("Risk Assessment", "Enter applicant details to estimate default probability."),
     ("Model Performance", "Validation comparison, test metrics, calibration and thresholds."),
     ("Explainability", "Global drivers and per-applicant contribution breakdowns."),

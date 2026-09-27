@@ -49,6 +49,7 @@ _render_chrome()
 # Function-based pages; url_path is set explicitly because every page module's
 # entry function is named render() (otherwise their identifiers would collide).
 from ui.pages import (  # noqa: E402
+    analytics,
     assessment,
     dataset_quality,
     explainability,
@@ -60,13 +61,14 @@ from ui.pages import (  # noqa: E402
 )
 
 nav = st.navigation([
-    st.Page(overview.render, title="Overview", icon="🏠", url_path="overview", default=True),
-    st.Page(assessment.render, title="Risk Assessment", icon="📝", url_path="assessment"),
-    st.Page(result.render, title="Prediction Result", icon="🎯", url_path="result"),
-    st.Page(explainability.render, title="Explainability", icon="🔍", url_path="explainability"),
-    st.Page(performance.render, title="Model Performance", icon="📈", url_path="performance"),
-    st.Page(dataset_quality.render, title="Dataset Quality", icon="🧪", url_path="dataset"),
-    st.Page(model_info.render, title="Model Information", icon="ℹ️", url_path="model"),
-    st.Page(responsible_use.render, title="Responsible Use", icon="⚖️", url_path="responsible-use"),
+    st.Page(overview.render, title="Overview", url_path="overview", default=True),
+    st.Page(analytics.render, title="Analytics Dashboard", url_path="analytics"),
+    st.Page(assessment.render, title="Risk Assessment", url_path="assessment"),
+    st.Page(result.render, title="Prediction Result", url_path="result"),
+    st.Page(explainability.render, title="Explainability", url_path="explainability"),
+    st.Page(performance.render, title="Model Performance", url_path="performance"),
+    st.Page(dataset_quality.render, title="Dataset Quality", url_path="dataset"),
+    st.Page(model_info.render, title="Model Information", url_path="model"),
+    st.Page(responsible_use.render, title="Responsible Use", url_path="responsible-use"),
 ])
 nav.run()
