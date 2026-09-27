@@ -9,9 +9,11 @@ from __future__ import annotations
 
 from typing import Any
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 
+from ui import charts
 from ui.helpers import (
     get_service,
     num,
@@ -54,39 +56,79 @@ def _global_importance(service: Any) -> None:
         "reflect a real lending population.",
     )
 
-    gi: dict[str, Any] = metrics.get("global_importance", {})
-    st.markdown(f"Method: `{gi.get('method')}`")
-    if gi.get("interpretation"):
-        st.markdown(gi["interpretation"])
-    if gi.get("note"):
-        st.markdown(gi["note"])
-
-    features = gi.get("features")
-    if features:
-        # Horizontal bar chart: importance by feature (largest reads at a glance).
-        chart_df = pd.DataFrame(
-            {"importance": [f.get("importance") for f in features]},
-            index=[f.get("feature") for f in features],
-        )
-        st.bar_chart(chart_df, horizontal=True)
-
-        # Numeric companion table (importance to 4dp; include std when present).
-        has_std = any(f.get("std") is not None for f in features)
-        rows: list[dict[str, Any]] = []
-        for f in features:
-            row = {"Feature": f.get("feature"), "Importance": num(f.get("importance"), 4)}
-            if has_std:
-                row["Std"] = num(f.get("std"), 4)
-            rows.append(row)
-        st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
-    else:
-        st.info("No importance values are available.")
+    st.markdown(
+        "Two complementary views: **tree importance** is how often the model "
+        "splits on a feature (cheap, but biased toward high-cardinality fields); "
+        "**permutation importance** is the actual ROC-AUC lost when the feature "
+        "is shuffled (slower, but a direct measure of predictive value)."
+    )
+    tab_tree, tab_perm = st.tabs(["Tree importance", "Permutation importance"])
+    with tab_tree:
+        _importance_block(metrics.get("global_importance", {}), kind="tree")
+    with tab_perm:
+        _importance_block(metrics.get("permutation_importance", {}), kind="permutation")
 
     st.caption(
-        "These values show association with predicted risk, NOT causation. A "
-        "high-importance feature is one the model relies on, not a proven cause "
-        "of default."
+        "The two rankings need not agree: a feature can be split on often yet "
+        "carry little unique signal (or vice-versa). Both show association with "
+        "predicted risk, **NOT causation** — a high-importance feature is one the "
+        "model relies on, not a proven cause of default."
     )
+
+
+def _importance_block(block: dict[str, Any], *, kind: str) -> None:
+    """Render one importance ranking (tree or permutation) as a sorted bar chart
+    plus a numeric table. Permutation bars carry ±std whiskers when available."""
+    if not block:
+        st.info("This importance view is not available.")
+        return
+    st.markdown(f"Method: `{block.get('method')}`")
+    meta: list[str] = []
+    if kind == "tree" and block.get("folds_averaged"):
+        meta.append(f"averaged over {block['folds_averaged']} folds")
+    if kind == "permutation":
+        if block.get("n_repeats") is not None:
+            meta.append(f"{block['n_repeats']} shuffles")
+        if block.get("n_samples") is not None:
+            meta.append(f"{int(block['n_samples']):,}-row sample")
+    if meta:
+        st.caption(" · ".join(meta))
+    if block.get("interpretation"):
+        st.markdown(block["interpretation"])
+
+    feats = block.get("features") or []
+    df = pd.DataFrame([{"Feature": f.get("feature"),
+                        "Importance": f.get("importance"),
+                        "std": f.get("std")} for f in feats])
+    df = df.dropna(subset=["Importance"]).sort_values("Importance", ascending=False)
+    if df.empty:
+        st.info("No importance values are available.")
+        return
+    order = df["Feature"].tolist()
+    xtitle = "Mean ROC-AUC drop" if kind == "permutation" else "Tree split importance"
+    bars = alt.Chart(df).mark_bar(color=charts.ACCENT).encode(
+        x=alt.X("Importance:Q", title=xtitle),
+        y=alt.Y("Feature:N", sort=order, title=None),
+        tooltip=[alt.Tooltip("Feature:N"),
+                 alt.Tooltip("Importance:Q", format=".4f")],
+    )
+    layers = bars
+    if df["std"].notna().any():
+        d2 = df.assign(lo=df["Importance"] - df["std"].fillna(0),
+                       hi=df["Importance"] + df["std"].fillna(0))
+        err = alt.Chart(d2).mark_rule(color=charts.INK, strokeWidth=1.5).encode(
+            y=alt.Y("Feature:N", sort=order), x="lo:Q", x2="hi:Q")
+        layers = bars + err
+    charts.show(layers, height=max(200, 26 * len(df)))
+
+    has_std = df["std"].notna().any()
+    rows: list[dict[str, Any]] = []
+    for _, r in df.iterrows():
+        row = {"Feature": r["Feature"], "Importance": num(r["Importance"], 4)}
+        if has_std:
+            row["± Std"] = num(r["std"], 4)
+        rows.append(row)
+    st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
 
 
 def _applicant_explanation() -> None:

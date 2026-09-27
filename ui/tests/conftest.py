@@ -1,15 +1,19 @@
-"""Shared pytest fixtures for the loan-risk test suite.
+"""Shared pytest fixtures for the Streamlit UI + service-layer suite.
 
-Fixtures reuse the existing synthetic fixture and the trained artifacts
-(read-only) so tests are fast. Everything is session-scoped and, if the
-synthetic data or artifacts are missing, builds them exactly once; fixtures that
-need a loaded model depend on ``trained_model`` so training always runs first.
+Hermetic by construction: before anything imports the config we synthesize a
+throwaway ``config.hermetic.yaml`` that (a) forces ``dataset.source: synthetic``
+and (b) redirects every writable path into an isolated temp dir. So the suite
+never reads the git-ignored real Kaggle CSV and never touches (or clobbers) the
+developer's real ``./artifacts``. The serving layer also calls ``load_config()``,
+so pointing ``LOAN_RISK_CONFIG`` at this file keeps the model the UI loads
+consistent with the config the tests assert against.
 """
 from __future__ import annotations
 
 import atexit
 import os
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 
@@ -17,25 +21,13 @@ import pandas as pd
 import pytest
 import yaml
 
-# ---------------------------------------------------------------------------
-# Hermetic test configuration (must run before anything imports the config, so
-# it lives at conftest import time — pytest imports conftest before
-# collecting/importing any test module).
-#
-# The shipped config/config.yaml sets `dataset.source: real`, but the real Kaggle
-# `application_train.csv` is git-ignored, absent on a clean clone, and gated
-# behind competition-rule acceptance. A suite that honored that source would
-# error at fixture setup on every fresh checkout. We therefore synthesize a
-# throwaway config that (a) forces `dataset.source: synthetic` (self-generated on
-# demand) and (b) redirects every writable path (artifacts, reports, data,
-# manifest) into an isolated temp directory. This makes the suite independent of
-# the real dataset AND non-destructive: it never reads or clobbers a real trained
-# model the developer may already have in ./artifacts. The serving layer also
-# calls load_config(), so pointing LOAN_RISK_CONFIG at this file keeps the model
-# it loads consistent with the config the tests assert against.
-# ---------------------------------------------------------------------------
-_REPO_ROOT = Path(__file__).resolve().parents[1]
-_TMP_ROOT = Path(tempfile.mkdtemp(prefix="loan_risk_tests_"))
+# Repo root is two levels up from ui/tests/. Put it first on sys.path so the
+# working-copy ``ui`` and ``loan_risk`` win over any editable install elsewhere.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+_TMP_ROOT = Path(tempfile.mkdtemp(prefix="loan_risk_ui_tests_"))
 atexit.register(shutil.rmtree, _TMP_ROOT, ignore_errors=True)
 
 
@@ -58,7 +50,6 @@ def _write_hermetic_config() -> Path:
 
 
 os.environ["LOAN_RISK_CONFIG"] = str(_write_hermetic_config())
-
 # Import config machinery only after LOAN_RISK_CONFIG is set, and clear any cache
 # a stray earlier import may have populated with the real config.
 from loan_risk.config import load_config  # noqa: E402
@@ -96,6 +87,21 @@ def trained_model(cfg):
         from loan_risk.pipeline.run import train
         train(cfg)
     return artifacts.load_model(cfg)
+
+
+@pytest.fixture()
+def service_with_model(trained_model):
+    """A freshly-built ModelService that has loaded the hermetic trained model.
+
+    ``get_service`` is an ``st.cache_resource`` singleton, so it may have been
+    built (model-absent) by an earlier test before training ran. Clear it so the
+    rebuilt service picks up the just-trained artifacts.
+    """
+    from ui.helpers import get_service
+    get_service.clear()
+    svc = get_service()
+    assert svc.available, "hermetic model should be loaded after training"
+    return svc
 
 
 @pytest.fixture()

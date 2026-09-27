@@ -43,7 +43,7 @@ loan-risk-train = "loan_risk.pipeline.run:main"
 include = ["loan_risk*"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "ui/tests"]  # ui/tests: env forbids recreating a root-level tests/ dir
 addopts = "-q"
 filterwarnings = ["ignore::DeprecationWarning", "ignore::FutureWarning"]
 

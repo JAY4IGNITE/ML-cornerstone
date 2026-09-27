@@ -23,12 +23,16 @@ from ui.helpers import (
 # Signposts to the other pages (title, one-line description). Rendered as a grid
 # of bordered cards; kept as data so the layout stays a simple loop.
 _EXPLORE = [
-    ("Analytics Dashboard", "Business metrics and data distributions across the applicant pool."),
+    ("Analytics Dashboard", "Portfolio composition and the factors that move default risk."),
     ("Risk Assessment", "Enter applicant details to estimate default probability."),
-    ("Model Performance", "Validation comparison, test metrics, calibration and thresholds."),
-    ("Explainability", "Global drivers and per-applicant contribution breakdowns."),
-    ("Dataset Quality", "Validation checks and the dataset manifest with known limits."),
+    ("Explainability", "Global drivers (tree + permutation) and per-applicant contributions."),
+    ("Model Selection", "The cross-validated evidence behind why this model was chosen."),
+    ("Model Performance", "Test metrics, the operating threshold, calibration and thresholds."),
+    ("Methodology & Formulas", "The exact formula behind every metric, score and feature."),
+    ("Feature Reference", "A complete, honest data dictionary for every model input."),
     ("Model Information", "Selected model, version, training details and calibration."),
+    ("Fairness Diagnostics", "Group error rates and disparity ratios flagged for human review."),
+    ("Dataset Quality", "Validation checks and the dataset manifest with known limits."),
     ("Responsible Use", "Scope, limitations and appropriate use of these estimates."),
 ]
 
@@ -62,7 +66,9 @@ def render() -> None:
     _kpis(mi, metrics)
 
     st.subheader("Explore")
-    # Two rows of three bordered cards.
+    st.caption("Every page is grouped in the sidebar under Overview, Assessment, "
+               "Model & Methodology, and Governance.")
+    # Bordered cards laid out three per row.
     for start in range(0, len(_EXPLORE), 3):
         cols = st.columns(3)
         for col, (title, desc) in zip(cols, _EXPLORE[start:start + 3]):

@@ -118,3 +118,35 @@ def synthetic_warning(is_synthetic: bool, message: str | None, *,
     synthetic_warning when present; otherwise the page-specific `fallback`."""
     if is_synthetic:
         st.warning(f"**{title}** — {message or fallback}")
+
+
+# ---- global styling --------------------------------------------------------
+# A theme would normally live in .streamlit/config.toml; this deployment cannot
+# create that directory, so we inject an equivalent, conservative style pass
+# once per rerun from the app chrome. Selectors target stable Streamlit testids
+# and degrade to no-ops if a future version renames them.
+_BASE_STYLES = """
+<style>
+  .block-container { padding-top: 2.1rem; padding-bottom: 3rem; max-width: 1280px; }
+  h1 { font-weight: 700; letter-spacing: -0.02em; }
+  h2, h3 { font-weight: 650; letter-spacing: -0.01em; }
+  hr { margin: 1.15rem 0; }
+  [data-testid="stMetric"] {
+    background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.6rem;
+    padding: 0.85rem 1rem 0.7rem;
+  }
+  [data-testid="stMetricLabel"] p { font-weight: 600; opacity: 0.72; }
+  [data-testid="stMetricValue"] { font-variant-numeric: tabular-nums; }
+  [data-testid="stDataFrame"] { border-radius: 0.5rem; }
+  a { color: #1d4ed8; }
+  [data-testid="baseButton-primary"], .stButton>button[kind="primary"] {
+    background: #2563eb; border-color: #2563eb;
+  }
+</style>
+"""
+
+
+def inject_base_styles() -> None:
+    """Apply the shared, professional style pass. Call once from the app chrome
+    before rendering any page. Idempotent per rerun."""
+    st.markdown(_BASE_STYLES, unsafe_allow_html=True)
