@@ -132,15 +132,15 @@ _BASE_STYLES = """
   h2, h3 { font-weight: 650; letter-spacing: -0.01em; }
   hr { margin: 1.15rem 0; }
   [data-testid="stMetric"] {
-    background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.6rem;
+    background: var(--secondary-background-color); border: 1px solid var(--border-color); border-radius: 0.6rem;
     padding: 0.85rem 1rem 0.7rem;
   }
   [data-testid="stMetricLabel"] p { font-weight: 600; opacity: 0.72; }
   [data-testid="stMetricValue"] { font-variant-numeric: tabular-nums; }
   [data-testid="stDataFrame"] { border-radius: 0.5rem; }
-  a { color: #1d4ed8; }
+  a { color: var(--primary-color); }
   [data-testid="baseButton-primary"], .stButton>button[kind="primary"] {
-    background: #2563eb; border-color: #2563eb;
+    background: var(--primary-color); border-color: var(--primary-color);
   }
 </style>
 """
