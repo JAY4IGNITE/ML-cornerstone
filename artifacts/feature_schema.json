@@ -1,0 +1,339 @@
+{
+  "numeric_features": [
+    {
+      "name": "AMT_INCOME_TOTAL",
+      "label": "Annual income",
+      "unit": "currency",
+      "meaning": "Total declared income of the client",
+      "min": 0.0,
+      "max": 5000000.0,
+      "example": 180000,
+      "missing_behavior": "median imputation (should rarely be missing)"
+    },
+    {
+      "name": "AMT_CREDIT",
+      "label": "Loan credit amount",
+      "unit": "currency",
+      "meaning": "Credit amount of the loan",
+      "min": 0.0,
+      "max": 5000000.0,
+      "example": 600000,
+      "missing_behavior": "median imputation"
+    },
+    {
+      "name": "AMT_ANNUITY",
+      "label": "Loan annuity",
+      "unit": "currency",
+      "meaning": "Loan annuity (periodic payment)",
+      "min": 0.0,
+      "max": 500000.0,
+      "example": 27000,
+      "missing_behavior": "median imputation"
+    },
+    {
+      "name": "AMT_GOODS_PRICE",
+      "label": "Goods price",
+      "unit": "currency",
+      "meaning": "Price of the goods for which the loan is granted",
+      "min": 0.0,
+      "max": 5000000.0,
+      "example": 540000,
+      "missing_behavior": "median imputation"
+    },
+    {
+      "name": "AGE_YEARS",
+      "label": "Age",
+      "unit": "years",
+      "meaning": "Client age in years. This IS the canonical model column; the raw file's DAYS_BIRTH (negative day-count) is converted to it once during ingestion, so training and serving share it.",
+      "min": 18.0,
+      "max": 100.0,
+      "example": 35,
+      "missing_behavior": "required; validated on input"
+    },
+    {
+      "name": "EMPLOYMENT_YEARS",
+      "label": "Years employed",
+      "unit": "years",
+      "meaning": "Years employed at current job. Canonical model column derived once at ingestion from DAYS_EMPLOYED; the documented 365243 sentinel (pensioners/unemployed) becomes missing with a DAYS_EMPLOYED_MISSING indicator. Omit at serving for pensioners/unemployed -> flag set, value imputed.",
+      "min": 0.0,
+      "max": 50.0,
+      "example": 5,
+      "missing_behavior": "median imputation + DAYS_EMPLOYED_MISSING flag"
+    },
+    {
+      "name": "CNT_FAM_MEMBERS",
+      "label": "Family members",
+      "unit": "count",
+      "meaning": "Number of family members",
+      "min": 1.0,
+      "max": 20.0,
+      "example": 2,
+      "missing_behavior": "median imputation"
+    },
+    {
+      "name": "CNT_CHILDREN",
+      "label": "Children",
+      "unit": "count",
+      "meaning": "Number of children the client has",
+      "min": 0.0,
+      "max": 20.0,
+      "example": 0,
+      "missing_behavior": "median imputation"
+    },
+    {
+      "name": "EXT_SOURCE_1",
+      "label": "External score 1",
+      "unit": "score 0-1",
+      "meaning": "Normalized score from external data source 1",
+      "min": 0.0,
+      "max": 1.0,
+      "example": 0.5,
+      "missing_behavior": "frequently missing; median imputation + indicator"
+    },
+    {
+      "name": "EXT_SOURCE_2",
+      "label": "External score 2",
+      "unit": "score 0-1",
+      "meaning": "Normalized score from external data source 2",
+      "min": 0.0,
+      "max": 1.0,
+      "example": 0.6,
+      "missing_behavior": "median imputation + indicator"
+    },
+    {
+      "name": "EXT_SOURCE_3",
+      "label": "External score 3",
+      "unit": "score 0-1",
+      "meaning": "Normalized score from external data source 3",
+      "min": 0.0,
+      "max": 1.0,
+      "example": 0.5,
+      "missing_behavior": "frequently missing; median imputation + indicator"
+    },
+    {
+      "name": "REGION_POPULATION_RELATIVE",
+      "label": "Region population (relative)",
+      "unit": "ratio",
+      "meaning": "Normalized population of the region where the client lives",
+      "min": 0.0,
+      "max": 0.15,
+      "example": 0.02,
+      "missing_behavior": "median imputation"
+    }
+  ],
+  "categorical_features": [
+    {
+      "name": "NAME_CONTRACT_TYPE",
+      "label": "Contract type",
+      "meaning": "Loan type: cash or revolving",
+      "categories": [
+        "Cash loans",
+        "Revolving loans"
+      ],
+      "example": "Cash loans",
+      "missing_behavior": "unknown token"
+    },
+    {
+      "name": "CODE_GENDER",
+      "label": "Gender",
+      "meaning": "Gender of the client",
+      "categories": [
+        "M",
+        "F",
+        "XNA"
+      ],
+      "example": "F",
+      "missing_behavior": "unknown token"
+    },
+    {
+      "name": "FLAG_OWN_CAR",
+      "label": "Owns a car",
+      "meaning": "Whether the client owns a car",
+      "categories": [
+        "Y",
+        "N"
+      ],
+      "example": "N",
+      "missing_behavior": "unknown token"
+    },
+    {
+      "name": "FLAG_OWN_REALTY",
+      "label": "Owns real estate",
+      "meaning": "Whether the client owns real estate",
+      "categories": [
+        "Y",
+        "N"
+      ],
+      "example": "Y",
+      "missing_behavior": "unknown token"
+    },
+    {
+      "name": "NAME_INCOME_TYPE",
+      "label": "Income type",
+      "meaning": "Client's income source",
+      "categories": [
+        "Working",
+        "State servant",
+        "Commercial associate",
+        "Pensioner",
+        "Unemployed",
+        "Student",
+        "Businessman",
+        "Maternity leave"
+      ],
+      "example": "Working",
+      "missing_behavior": "unknown token"
+    },
+    {
+      "name": "NAME_EDUCATION_TYPE",
+      "label": "Education",
+      "meaning": "Highest level of education achieved",
+      "categories": [
+        "Lower secondary",
+        "Secondary / secondary special",
+        "Incomplete higher",
+        "Higher education",
+        "Academic degree"
+      ],
+      "example": "Higher education",
+      "missing_behavior": "unknown token"
+    },
+    {
+      "name": "NAME_FAMILY_STATUS",
+      "label": "Family status",
+      "meaning": "Family status of the client",
+      "categories": [
+        "Single / not married",
+        "Married",
+        "Civil marriage",
+        "Widow",
+        "Separated",
+        "Unknown"
+      ],
+      "example": "Married",
+      "missing_behavior": "unknown token"
+    },
+    {
+      "name": "NAME_HOUSING_TYPE",
+      "label": "Housing type",
+      "meaning": "Housing situation of the client",
+      "categories": [
+        "House / apartment",
+        "Rented apartment",
+        "With parents",
+        "Municipal apartment",
+        "Office apartment",
+        "Co-op apartment"
+      ],
+      "example": "House / apartment",
+      "missing_behavior": "unknown token"
+    },
+    {
+      "name": "OCCUPATION_TYPE",
+      "label": "Occupation",
+      "meaning": "Occupation of the client (often missing in real data)",
+      "categories": [
+        "Laborers",
+        "Core staff",
+        "Accountants",
+        "Managers",
+        "Drivers",
+        "Sales staff",
+        "Cleaning staff",
+        "Cooking staff",
+        "Private service staff",
+        "Medicine staff",
+        "Security staff",
+        "High skill tech staff",
+        "Waiters/barmen staff",
+        "Low-skill Laborers",
+        "Realty agents",
+        "Secretaries",
+        "IT staff",
+        "HR staff"
+      ],
+      "example": "Core staff",
+      "missing_behavior": "unknown token (missingness is itself informative)"
+    }
+  ],
+  "engineered_features": [
+    {
+      "name": "CREDIT_INCOME_RATIO",
+      "formula": "AMT_CREDIT / AMT_INCOME_TOTAL",
+      "inputs": [
+        "AMT_CREDIT",
+        "AMT_INCOME_TOTAL"
+      ],
+      "unit": "ratio",
+      "interpretation": "Loan size relative to income; higher = more leverage.",
+      "leakage_assessment": "Safe: both known at application time."
+    },
+    {
+      "name": "ANNUITY_INCOME_RATIO",
+      "formula": "AMT_ANNUITY / AMT_INCOME_TOTAL",
+      "inputs": [
+        "AMT_ANNUITY",
+        "AMT_INCOME_TOTAL"
+      ],
+      "unit": "ratio",
+      "interpretation": "Payment burden relative to income (affordability).",
+      "leakage_assessment": "Safe: both known at application time."
+    },
+    {
+      "name": "CREDIT_ANNUITY_RATIO",
+      "formula": "AMT_CREDIT / AMT_ANNUITY",
+      "inputs": [
+        "AMT_CREDIT",
+        "AMT_ANNUITY"
+      ],
+      "unit": "ratio (~term)",
+      "interpretation": "Approximate loan term in payment periods.",
+      "leakage_assessment": "Safe: both known at application time."
+    },
+    {
+      "name": "CREDIT_GOODS_RATIO",
+      "formula": "AMT_CREDIT / AMT_GOODS_PRICE",
+      "inputs": [
+        "AMT_CREDIT",
+        "AMT_GOODS_PRICE"
+      ],
+      "unit": "ratio",
+      "interpretation": "Loan vs goods value; >1 implies borrowing beyond price.",
+      "leakage_assessment": "Safe: both known at application time."
+    },
+    {
+      "name": "EMPLOYMENT_AGE_RATIO",
+      "formula": "EMPLOYMENT_YEARS / AGE_YEARS",
+      "inputs": [
+        "EMPLOYMENT_YEARS",
+        "AGE_YEARS"
+      ],
+      "unit": "ratio",
+      "interpretation": "Share of life in current employment; stability proxy.",
+      "leakage_assessment": "Safe: derived from applicant attributes."
+    },
+    {
+      "name": "EXT_SOURCE_MEAN",
+      "formula": "mean(EXT_SOURCE_1, EXT_SOURCE_2, EXT_SOURCE_3) ignoring NaN",
+      "inputs": [
+        "EXT_SOURCE_1",
+        "EXT_SOURCE_2",
+        "EXT_SOURCE_3"
+      ],
+      "unit": "score 0-1",
+      "interpretation": "Aggregate external creditworthiness signal.",
+      "leakage_assessment": "Safe: external scores are inputs, not outcomes."
+    },
+    {
+      "name": "INCOME_PER_FAM_MEMBER",
+      "formula": "AMT_INCOME_TOTAL / CNT_FAM_MEMBERS",
+      "inputs": [
+        "AMT_INCOME_TOTAL",
+        "CNT_FAM_MEMBERS"
+      ],
+      "unit": "currency",
+      "interpretation": "Per-capita household income.",
+      "leakage_assessment": "Safe: both known at application time."
+    }
+  ]
+}

@@ -1,0 +1,239 @@
+{
+  "source_file": "application_train.csv",
+  "n_rows": 307511,
+  "n_cols": 122,
+  "summary": {
+    "pass": 10,
+    "warn": 1,
+    "fail": 0
+  },
+  "has_errors": false,
+  "checks": [
+    {
+      "name": "required_columns",
+      "status": "pass",
+      "detail": "All required raw columns present.",
+      "data": {}
+    },
+    {
+      "name": "target_distribution",
+      "status": "pass",
+      "detail": "Target distribution {'0': 282686, '1': 24825}; positive rate 0.0807.",
+      "data": {
+        "counts": {
+          "0": 282686,
+          "1": 24825
+        },
+        "positive_rate": 0.08072881945686496,
+        "missing": 0
+      }
+    },
+    {
+      "name": "numeric_types",
+      "status": "pass",
+      "detail": "Numeric columns are numeric-coercible.",
+      "data": {}
+    },
+    {
+      "name": "missing_values",
+      "status": "warn",
+      "detail": "67 columns contain missing values.",
+      "data": {
+        "counts": {
+          "AMT_ANNUITY": 12,
+          "AMT_GOODS_PRICE": 278,
+          "NAME_TYPE_SUITE": 1292,
+          "OWN_CAR_AGE": 202929,
+          "OCCUPATION_TYPE": 96391,
+          "CNT_FAM_MEMBERS": 2,
+          "EXT_SOURCE_1": 173378,
+          "EXT_SOURCE_2": 660,
+          "EXT_SOURCE_3": 60965,
+          "APARTMENTS_AVG": 156061,
+          "BASEMENTAREA_AVG": 179943,
+          "YEARS_BEGINEXPLUATATION_AVG": 150007,
+          "YEARS_BUILD_AVG": 204488,
+          "COMMONAREA_AVG": 214865,
+          "ELEVATORS_AVG": 163891,
+          "ENTRANCES_AVG": 154828,
+          "FLOORSMAX_AVG": 153020,
+          "FLOORSMIN_AVG": 208642,
+          "LANDAREA_AVG": 182590,
+          "LIVINGAPARTMENTS_AVG": 210199,
+          "LIVINGAREA_AVG": 154350,
+          "NONLIVINGAPARTMENTS_AVG": 213514,
+          "NONLIVINGAREA_AVG": 169682,
+          "APARTMENTS_MODE": 156061,
+          "BASEMENTAREA_MODE": 179943,
+          "YEARS_BEGINEXPLUATATION_MODE": 150007,
+          "YEARS_BUILD_MODE": 204488,
+          "COMMONAREA_MODE": 214865,
+          "ELEVATORS_MODE": 163891,
+          "ENTRANCES_MODE": 154828,
+          "FLOORSMAX_MODE": 153020,
+          "FLOORSMIN_MODE": 208642,
+          "LANDAREA_MODE": 182590,
+          "LIVINGAPARTMENTS_MODE": 210199,
+          "LIVINGAREA_MODE": 154350,
+          "NONLIVINGAPARTMENTS_MODE": 213514,
+          "NONLIVINGAREA_MODE": 169682,
+          "APARTMENTS_MEDI": 156061,
+          "BASEMENTAREA_MEDI": 179943,
+          "YEARS_BEGINEXPLUATATION_MEDI": 150007,
+          "YEARS_BUILD_MEDI": 204488,
+          "COMMONAREA_MEDI": 214865,
+          "ELEVATORS_MEDI": 163891,
+          "ENTRANCES_MEDI": 154828,
+          "FLOORSMAX_MEDI": 153020,
+          "FLOORSMIN_MEDI": 208642,
+          "LANDAREA_MEDI": 182590,
+          "LIVINGAPARTMENTS_MEDI": 210199,
+          "LIVINGAREA_MEDI": 154350,
+          "NONLIVINGAPARTMENTS_MEDI": 213514,
+          "NONLIVINGAREA_MEDI": 169682,
+          "FONDKAPREMONT_MODE": 210295,
+          "HOUSETYPE_MODE": 154297,
+          "TOTALAREA_MODE": 148431,
+          "WALLSMATERIAL_MODE": 156341,
+          "EMERGENCYSTATE_MODE": 145755,
+          "OBS_30_CNT_SOCIAL_CIRCLE": 1021,
+          "DEF_30_CNT_SOCIAL_CIRCLE": 1021,
+          "OBS_60_CNT_SOCIAL_CIRCLE": 1021,
+          "DEF_60_CNT_SOCIAL_CIRCLE": 1021,
+          "DAYS_LAST_PHONE_CHANGE": 1,
+          "AMT_REQ_CREDIT_BUREAU_HOUR": 41519,
+          "AMT_REQ_CREDIT_BUREAU_DAY": 41519,
+          "AMT_REQ_CREDIT_BUREAU_WEEK": 41519,
+          "AMT_REQ_CREDIT_BUREAU_MON": 41519,
+          "AMT_REQ_CREDIT_BUREAU_QRT": 41519,
+          "AMT_REQ_CREDIT_BUREAU_YEAR": 41519
+        },
+        "fraction": {
+          "AMT_ANNUITY": 0.0,
+          "AMT_GOODS_PRICE": 0.0009,
+          "NAME_TYPE_SUITE": 0.0042,
+          "OWN_CAR_AGE": 0.6599,
+          "OCCUPATION_TYPE": 0.3135,
+          "CNT_FAM_MEMBERS": 0.0,
+          "EXT_SOURCE_1": 0.5638,
+          "EXT_SOURCE_2": 0.0021,
+          "EXT_SOURCE_3": 0.1983,
+          "APARTMENTS_AVG": 0.5075,
+          "BASEMENTAREA_AVG": 0.5852,
+          "YEARS_BEGINEXPLUATATION_AVG": 0.4878,
+          "YEARS_BUILD_AVG": 0.665,
+          "COMMONAREA_AVG": 0.6987,
+          "ELEVATORS_AVG": 0.533,
+          "ENTRANCES_AVG": 0.5035,
+          "FLOORSMAX_AVG": 0.4976,
+          "FLOORSMIN_AVG": 0.6785,
+          "LANDAREA_AVG": 0.5938,
+          "LIVINGAPARTMENTS_AVG": 0.6835,
+          "LIVINGAREA_AVG": 0.5019,
+          "NONLIVINGAPARTMENTS_AVG": 0.6943,
+          "NONLIVINGAREA_AVG": 0.5518,
+          "APARTMENTS_MODE": 0.5075,
+          "BASEMENTAREA_MODE": 0.5852,
+          "YEARS_BEGINEXPLUATATION_MODE": 0.4878,
+          "YEARS_BUILD_MODE": 0.665,
+          "COMMONAREA_MODE": 0.6987,
+          "ELEVATORS_MODE": 0.533,
+          "ENTRANCES_MODE": 0.5035,
+          "FLOORSMAX_MODE": 0.4976,
+          "FLOORSMIN_MODE": 0.6785,
+          "LANDAREA_MODE": 0.5938,
+          "LIVINGAPARTMENTS_MODE": 0.6835,
+          "LIVINGAREA_MODE": 0.5019,
+          "NONLIVINGAPARTMENTS_MODE": 0.6943,
+          "NONLIVINGAREA_MODE": 0.5518,
+          "APARTMENTS_MEDI": 0.5075,
+          "BASEMENTAREA_MEDI": 0.5852,
+          "YEARS_BEGINEXPLUATATION_MEDI": 0.4878,
+          "YEARS_BUILD_MEDI": 0.665,
+          "COMMONAREA_MEDI": 0.6987,
+          "ELEVATORS_MEDI": 0.533,
+          "ENTRANCES_MEDI": 0.5035,
+          "FLOORSMAX_MEDI": 0.4976,
+          "FLOORSMIN_MEDI": 0.6785,
+          "LANDAREA_MEDI": 0.5938,
+          "LIVINGAPARTMENTS_MEDI": 0.6835,
+          "LIVINGAREA_MEDI": 0.5019,
+          "NONLIVINGAPARTMENTS_MEDI": 0.6943,
+          "NONLIVINGAREA_MEDI": 0.5518,
+          "FONDKAPREMONT_MODE": 0.6839,
+          "HOUSETYPE_MODE": 0.5018,
+          "TOTALAREA_MODE": 0.4827,
+          "WALLSMATERIAL_MODE": 0.5084,
+          "EMERGENCYSTATE_MODE": 0.474,
+          "OBS_30_CNT_SOCIAL_CIRCLE": 0.0033,
+          "DEF_30_CNT_SOCIAL_CIRCLE": 0.0033,
+          "OBS_60_CNT_SOCIAL_CIRCLE": 0.0033,
+          "DEF_60_CNT_SOCIAL_CIRCLE": 0.0033,
+          "DAYS_LAST_PHONE_CHANGE": 0.0,
+          "AMT_REQ_CREDIT_BUREAU_HOUR": 0.135,
+          "AMT_REQ_CREDIT_BUREAU_DAY": 0.135,
+          "AMT_REQ_CREDIT_BUREAU_WEEK": 0.135,
+          "AMT_REQ_CREDIT_BUREAU_MON": 0.135,
+          "AMT_REQ_CREDIT_BUREAU_QRT": 0.135,
+          "AMT_REQ_CREDIT_BUREAU_YEAR": 0.135
+        }
+      }
+    },
+    {
+      "name": "infinite_values",
+      "status": "pass",
+      "detail": "No infinite values.",
+      "data": {
+        "columns": {}
+      }
+    },
+    {
+      "name": "duplicate_rows",
+      "status": "pass",
+      "detail": "0 fully-duplicated rows.",
+      "data": {
+        "count": 0
+      }
+    },
+    {
+      "name": "duplicate_ids",
+      "status": "pass",
+      "detail": "0 duplicate SK_ID_CURR values.",
+      "data": {
+        "count": 0
+      }
+    },
+    {
+      "name": "numeric_ranges",
+      "status": "pass",
+      "detail": "Numeric ranges within expected bounds.",
+      "data": {
+        "columns": {}
+      }
+    },
+    {
+      "name": "categorical_values",
+      "status": "pass",
+      "detail": "Categorical values within documented sets.",
+      "data": {
+        "columns": {}
+      }
+    },
+    {
+      "name": "days_employed_sentinel",
+      "status": "pass",
+      "detail": "55374 rows use the 365243 pensioner/unemployed sentinel (handled as missing + indicator).",
+      "data": {
+        "count": 55374
+      }
+    },
+    {
+      "name": "leakage_scan",
+      "status": "pass",
+      "detail": "No obvious post-outcome columns among used features.",
+      "data": {
+        "columns": []
+      }
+    }
+  ]
+}

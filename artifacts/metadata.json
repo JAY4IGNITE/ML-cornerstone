@@ -1,0 +1,28 @@
+{
+  "model_name": "XGBoost",
+  "model_key": "xgboost",
+  "model_version": "0.1.0",
+  "trained_at": "2026-09-20T11:58:50Z",
+  "dataset_source": "real",
+  "synthetic": false,
+  "synthetic_warning": null,
+  "manifest_reference": "data/manifest.json",
+  "feature_schema_version": "1.0",
+  "selection_metric": "roc_auc",
+  "selection_basis": "cross_validation_5fold_mean",
+  "hyperparameters_tuned": true,
+  "calibration": {
+    "method": "isotonic",
+    "cv": 3,
+    "brier_before": 0.19605588912963867,
+    "brier_after": 0.06750000869660358,
+    "improved": true,
+    "status": "calibrated (isotonic/sigmoid via CV); probabilities adjusted toward observed frequencies"
+  },
+  "explainability_backends": {
+    "shap_installed": true,
+    "xgboost_installed": true
+  },
+  "risk_score_definition": "risk_score = round(default_probability * 100)",
+  "responsible_use_note": "Analytical estimate of default probability. NOT an autonomous lending decision. Requires human oversight."
+}

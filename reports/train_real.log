@@ -1,0 +1,16 @@
+[run] validation: {'pass': 10, 'warn': 1, 'fail': 0} -> C:\Users\ramuv\ML-cornerstone\reports\validation_report.json
+[run] manifest -> C:\Users\ramuv\ML-cornerstone\data\manifest.json
+[run] split: {'n_input_rows': 307511, 'dropped_duplicate_ids': 0, 'n_train': 196806, 'n_val': 49202, 'n_test': 61503, 'train_positive_rate': 0.0807, 'val_positive_rate': 0.0807, 'test_positive_rate': 0.0807, 'stratified': True, 'seed': 42}
+[run] training Logistic Regression ...
+[run]   Logistic Regression: val roc_auc=0.7419027098600217
+[run] training Decision Tree ...
+[run]   Decision Tree: val roc_auc=0.7226657712766729
+[run] training Random Forest ...
+[run]   Random Forest: val roc_auc=0.7481138030329041
+[run] training XGBoost ...
+[run]   XGBoost: val roc_auc=0.7599377908236276
+[run] selected: XGBoost (val roc_auc=0.7599)
+[run] TEST roc_auc=0.7666792436510453 pr_auc=0.255592473882044 brier=0.0672
+[run] metrics -> C:\Users\ramuv\ML-cornerstone\artifacts\metrics.json
+[run] artifacts -> C:\Users\ramuv\ML-cornerstone\artifacts
+EXIT_CODE=0
