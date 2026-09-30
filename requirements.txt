@@ -24,3 +24,7 @@ matplotlib>=3.8
 
 # --- testing ---
 pytest>=8.0
+
+# --- extras required for the pre-trained model ---
+xgboost>=2.1
+shap>=0.46
