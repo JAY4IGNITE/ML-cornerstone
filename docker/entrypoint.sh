@@ -48,5 +48,5 @@ else
   echo "[entrypoint] Found existing model artifact — skipping training."
 fi
 
-echo "[entrypoint] Starting Streamlit on 0.0.0.0:8501"
-exec streamlit run streamlit_app.py --server.port=8501 --server.address=0.0.0.0
+echo "[entrypoint] Starting Streamlit on 0.0.0.0:${PORT:-8501}"
+exec streamlit run streamlit_app.py --server.port=${PORT:-8501} --server.address=0.0.0.0
