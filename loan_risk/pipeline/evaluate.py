@@ -36,9 +36,10 @@ def compute_metrics(y_true, y_prob, *, threshold: float = 0.5) -> dict[str, Any]
 
     def _safe(fn_, **kw):
         try:
-            return float(fn_(y_true, y_prob if kw.pop("proba", False) else y_pred, **kw))
+            value = float(fn_(y_true, y_prob if kw.pop("proba", False) else y_pred, **kw))
+            return value if np.isfinite(value) else None
         except Exception as exc:  # pragma: no cover
-            return {"error": str(exc)}
+            return None
 
     return {
         "threshold": threshold,
@@ -46,12 +47,40 @@ def compute_metrics(y_true, y_prob, *, threshold: float = 0.5) -> dict[str, Any]
         "precision": float(precision_score(y_true, y_pred, zero_division=0)),
         "recall": float(recall_score(y_true, y_pred, zero_division=0)),
         "f1": float(f1_score(y_true, y_pred, zero_division=0)),
-        "roc_auc": _safe(roc_auc_score, proba=True),
-        "pr_auc": _safe(average_precision_score, proba=True),
+        "roc_auc": _safe(roc_auc_score, proba=True) if len(np.unique(y_true)) == 2 else None,
+        "pr_auc": _safe(average_precision_score, proba=True) if len(np.unique(y_true)) == 2 else None,
         "brier_score": float(brier_score_loss(y_true, y_prob)),
         "confusion_matrix": {"tn": int(tn), "fp": int(fp), "fn": int(fn), "tp": int(tp)},
         "n": int(len(y_true)),
         "positive_rate": float(y_true.mean()),
+        "metric_notes": ({"roc_auc": "Undefined when only one target class is present."}
+                         if len(np.unique(y_true)) < 2 else {}),
+    }
+
+
+def bootstrap_intervals(y_true, y_prob, *, threshold=0.5, seed=42, repeats=200):
+    """Percentile 95% intervals for a fixed model, conditional on this test set.
+
+    Does not quantify population shift, individual certainty, or training variance.
+    """
+    y = np.asarray(y_true, dtype=int)
+    p = np.asarray(y_prob, dtype=float)
+    rng = np.random.default_rng(seed)
+    draws = {key: [] for key in ("roc_auc", "pr_auc", "brier_score", "recall", "precision")}
+    for _ in range(repeats):
+        sample = rng.integers(0, len(y), len(y))
+        if len(np.unique(y[sample])) < 2:
+            continue
+        m = compute_metrics(y[sample], p[sample], threshold=threshold)
+        for key in draws:
+            draws[key].append(m[key])
+    return {
+        "method": "test-row percentile bootstrap", "confidence_level": 0.95,
+        "resamples": repeats, "seed": seed,
+        "note": "Fixed-model sampling uncertainty; not individual confidence or protection against dataset shift.",
+        "metrics": {key: {"lower": float(np.quantile(values, .025)),
+                          "upper": float(np.quantile(values, .975))}
+                    for key, values in draws.items() if values},
     }
 
 
@@ -100,7 +129,7 @@ def calibration_curve_points(y_true, y_prob, n_bins: int = 10) -> list[dict[str,
 
 
 def best_f1_threshold(y_true, y_prob) -> dict[str, float]:
-    """Threshold maximizing F1 on the given set (reported, not auto-applied)."""
+    """Threshold maximizing F1 on the given set (persisted by training for serving)."""
     y_true = np.asarray(y_true).astype(int)
     y_prob = np.asarray(y_prob, dtype=float)
     prec, rec, thr = precision_recall_curve(y_true, y_prob)

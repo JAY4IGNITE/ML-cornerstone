@@ -6,7 +6,7 @@ Flow:
   3. Standardize -> reproducible stratified split (test held out).
   4. Train each enabled model on TRAIN, evaluate on VAL.
   5. Select the best model by configured metric (NOT accuracy alone).
-  6. Refit best on TRAIN+VAL, calibrate probabilities (CV, no test leakage).
+  6. Fit calibrated candidates on TRAIN; reserve VAL for operating thresholds.
   7. Select the F1 operating point on VALIDATION, then evaluate on the untouched
      TEST set (metrics + threshold generalization + calibration curve).
   8. Global explainability.
@@ -18,6 +18,9 @@ flagged synthetic throughout.
 from __future__ import annotations
 
 import argparse
+import platform
+from importlib.metadata import version
+import joblib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -35,10 +38,12 @@ from .artifacts import (
     save_feature_schema,
     save_json,
     save_model,
+    file_sha256,
 )
 from .calibrate import calibrate_pipeline
 from .evaluate import (
     best_f1_threshold,
+    bootstrap_intervals,
     calibration_curve_points,
     compute_metrics,
     threshold_analysis,
@@ -128,15 +133,13 @@ def train(cfg: Config) -> dict[str, Any]:
         print(f"[run] {note}")
 
     X_train, X_val, X_test = _X(split.X_train), _X(split.X_val), _X(split.X_test)
-    X_trainval = pd.concat([X_train, X_val])
-    y_trainval = pd.concat([split.y_train, split.y_val])
 
     # --- optional hyperparameter tuning (RandomizedSearchCV on a subsample) ---
     # Tune BEFORE selection so the model comparison is between tuned models.
     tuning_results: dict[str, Any] = {}
     tuned_specs: list = []
     for spec in specs:
-        res = tune_model(spec, X_trainval, y_trainval, cfg)
+        res = tune_model(spec, X_train, split.y_train, cfg)
         if res is not None:
             tuning_results[spec.key] = res
             tuned_specs.append(apply_params(spec, res["best_params"]))
@@ -169,9 +172,9 @@ def train(cfg: Config) -> dict[str, Any]:
     cv_folds = int(cfg.get("selection", {}).get("cv_folds", 1))
     per_model_cv: dict[str, Any] = {}
     if cv_folds > 1:
-        # Stratified k-fold CV on TRAIN+VAL, select by MEAN score (std reported).
+        # Stratified k-fold CV on TRAIN, select by MEAN score (std reported).
         print(f"[run] cross-validated selection ({cv_folds}-fold) ...")
-        best_key, per_model_cv = cross_val_select(specs, X_trainval, y_trainval, cfg)
+        best_key, per_model_cv = cross_val_select(specs, X_train, split.y_train, cfg)
         for spec in specs:
             m = per_model_cv[spec.key]
             per_model[spec.key]["cv_metrics"] = m
@@ -192,43 +195,44 @@ def train(cfg: Config) -> dict[str, Any]:
 
     best_spec = spec_by_key[best_key]
 
-    # --- refit best on TRAIN+VAL, calibrate (X_trainval/y_trainval built above) ---
+    # Fit and calibrate on TRAIN only. Validation stays independent of all
+    # model fitting, tuning, and calibration; do not refit after threshold selection.
+    candidates = {}
+    candidate_details = {}
+    for spec in specs:
+        print(f"[run] calibrating {spec.display_name} on training folds ...")
+        pipe = build_pipeline(spec, cfg)
+        calibrated_candidate = calibrate_pipeline(pipe, X_train, split.y_train, cfg)
+        val_prob = _prob(calibrated_candidate, X_val)
+        point = best_f1_threshold(split.y_val, val_prob)
+        candidates[spec.key] = calibrated_candidate
+        candidate_details[spec.key] = {
+            "display_name": spec.display_name,
+            "decision_threshold": point["threshold"],
+            "threshold_basis": "held_out_validation_f1",
+            "calibration_method": cfg["calibration"]["method"],
+            "validation_metrics": compute_metrics(split.y_val, val_prob),
+        }
+    calibrated = candidates[best_key]
     refit = build_pipeline(best_spec, cfg)
-    refit.fit(X_trainval, y_trainval)
+    refit.fit(X_train, split.y_train)
     uncal_test_prob = _prob(refit, X_test)
-
-    calibrated = calibrate_pipeline(refit, X_trainval, y_trainval, cfg)
     cal_test_prob = _prob(calibrated, X_test)
-
-    # --- select the F1-optimal operating point on VALIDATION (never TEST) ---
-    # A decision threshold is a tunable operating point, so it must NOT be chosen
-    # by looking at the held-out TEST set. We select it on the calibrated model's
-    # VALIDATION predictions (the same probability scale the API serves) and then
-    # only REPORT how that fixed threshold generalizes to TEST. Caveat: VAL is
-    # in-sample for the calibrated model (it was refit on TRAIN+VAL), so the VAL
-    # figures are mildly optimistic — but a single scalar threshold has
-    # negligible capacity to overfit and TEST stays completely untouched by
-    # selection. The threshold is reported for analysis, not auto-applied at
-    # serving (risk bands use the configured probability cut points).
-    cal_val_prob = _prob(calibrated, X_val)
-    sel = best_f1_threshold(split.y_val, cal_val_prob)
-    sel_thr = sel["threshold"]
+    sel_thr = candidate_details[best_key]["decision_threshold"]
+    val_at_sel = compute_metrics(split.y_val, _prob(calibrated, X_val), threshold=sel_thr)
     test_at_sel = compute_metrics(split.y_test, cal_test_prob, threshold=sel_thr)
     selected_threshold = {
         "value": sel_thr,
-        "selection_basis": "validation",
-        "val_f1": sel["f1"],
-        "val_precision": sel["precision"],
-        "val_recall": sel["recall"],
+        "selection_basis": "held_out_validation",
+        "val_f1": val_at_sel["f1"],
+        "val_precision": val_at_sel["precision"],
+        "val_recall": val_at_sel["recall"],
         "test_f1": test_at_sel["f1"],
         "test_precision": test_at_sel["precision"],
         "test_recall": test_at_sel["recall"],
-        "note": (
-            "F1-optimal operating point chosen on the VALIDATION set (never the "
-            "test set, to avoid leakage), shown here with its test-set "
-            "generalization. Not auto-applied at serving — risk bands use the "
-            "configured probability cut points."
-        ),
+        "note": ("F1 threshold selected on validation rows excluded from fitting, "
+                 "tuning and calibration. Applied at serving for this model. "
+                 "A research operating point, not a lending policy."),
     }
 
     # --- final evaluation on untouched TEST ---
@@ -257,13 +261,37 @@ def train(cfg: Config) -> dict[str, Any]:
                                threshold=sel_thr)
 
     # --- persist ---
+    # Metadata is written last as the bundle completion marker. Its checksums
+    # let serving fail closed while a run is incomplete or mixed.
+    model_dir = cfg.path("artifacts") / "models"
+    model_dir.mkdir(parents=True, exist_ok=True)
+    for key, estimator in candidates.items():
+        joblib.dump(estimator, model_dir / f"{key}.joblib", compress=3)
     save_model(calibrated, cfg)
     save_feature_schema(cfg)
+    save_json(manifest, "dataset_manifest.json", cfg)
+    save_json(report.to_dict(), "validation_report.json", cfg)
 
     metadata = {
         "model_name": best_spec.display_name,
         "model_key": best_key,
-        "model_version": cfg["api"]["version"],
+        "model_version": _now().replace(":", "").replace("-", "") + "-" + file_sha256(raw_path)[:8],
+        "api_version": cfg["api"]["version"],
+        "candidate_details": candidate_details,
+        "decision_threshold": sel_thr,
+        "risk_score_config": cfg["risk_score"],
+        "dataset_sha256": file_sha256(raw_path),
+        "training_config": cfg.raw,
+        "runtime_versions": {name: version(name) for name in
+                             ("scikit-learn", "numpy", "pandas", "joblib")},
+        "python_version": platform.python_version(),
+        "training_rows": len(X_train),
+        "input_profile": {col: {"min": float(X_train[col].min()),
+                                "max": float(X_train[col].max())}
+                          for col in X_train.select_dtypes(include="number")
+                          if X_train[col].notna().any()},
+        "evaluation_protocol": "train_only_fit_validation_threshold_test_report",
+        "selection_note": "CV scores after hyperparameter search are selection diagnostics, not unbiased generalization estimates.",
         "trained_at": _now(),
         "dataset_source": source,
         "synthetic": is_synth,
@@ -298,7 +326,6 @@ def train(cfg: Config) -> dict[str, Any]:
             "lending decision. Requires human oversight."
         ),
     }
-    save_json(metadata, METADATA_FILE, cfg)
 
     metrics_blob = {
         "generated_at": _now(),
@@ -314,6 +341,14 @@ def train(cfg: Config) -> dict[str, Any]:
         "per_model_cross_validation": per_model_cv,
         "hyperparameter_tuning": tuning_results,
         "final_test_metrics": test_metrics,
+        "test_metrics_at_selected_threshold": test_at_sel,
+        "baseline_test_metrics": compute_metrics(split.y_test, np.full(len(split.y_test), pos)),
+        "test_confidence_intervals": bootstrap_intervals(
+            split.y_test, cal_test_prob, threshold=sel_thr, seed=cfg.seed,
+            repeats=int(cfg.get("evaluation", {}).get("bootstrap_repeats", 200))),
+        "evaluation_protocol": metadata["evaluation_protocol"],
+        "candidate_details": candidate_details,
+        "model_version": metadata["model_version"],
         "threshold_analysis": thr,
         "selected_threshold": selected_threshold,
         "calibration": {
@@ -326,6 +361,12 @@ def train(cfg: Config) -> dict[str, Any]:
         "skipped_models": skipped,
     }
     metrics_path = save_json(metrics_blob, METRICS_FILE, cfg)
+    bundle_files = ["model.joblib", "metrics.json", "feature_schema.json",
+                    "dataset_manifest.json", "validation_report.json"] + [
+        f"models/{key}.joblib" for key in candidates]
+    metadata["file_hashes"] = {name: file_sha256(cfg.path("artifacts") / name)
+                               for name in bundle_files}
+    save_json(metadata, METADATA_FILE, cfg)
     print(f"[run] metrics -> {metrics_path}")
     print(f"[run] artifacts -> {cfg.path('artifacts')}")
     if is_synth:

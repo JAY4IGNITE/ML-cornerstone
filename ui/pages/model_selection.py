@@ -1,4 +1,4 @@
-"""Model Selection page — why XGBoost, in detail.
+"""Model Selection page — evidence for the selected model.
 
 Answers the single question "why this model?" from the evaluation report the
 pipeline already wrote (metrics.json). Nothing is recomputed or fabricated: the
@@ -6,7 +6,7 @@ cross-validation scores, per-fold spreads and tuning results shown here are read
 straight from ``per_model_cross_validation`` and ``hyperparameter_tuning``.
 
 Selection rule (config/config.yaml → selection.cv_folds): each candidate is
-scored by stratified 5-fold cross-validation on TRAIN+VAL and ranked by the
+scored by configured stratified cross-validation on TRAIN and ranked by the
 MEAN ROC-AUC (std reported) — never a single lucky split, never raw accuracy.
 """
 from __future__ import annotations
@@ -64,9 +64,9 @@ def render() -> None:
         "are illustrative only.",
     )
 
-    _headline(cv, selected)
+    _headline(cv, selected, metrics)
     _live_model_predictor(service)
-    _how_selected()
+    _how_selected(metrics)
     _cv_comparison(cv, selected)
     _per_fold(cv, selected)
     _why_winner(cv, selected)
@@ -117,7 +117,7 @@ def _live_model_predictor(service: Any) -> None:
             unsafe_allow_html=True,
         )
     with c_right:
-        st.markdown("**Cross-Model Prediction Consensus:**")
+        st.markdown("**Available model predictions:**")
         mini_rows = []
         for mk, mr in (res.get("all_model_predictions") or {}).items():
             is_active = (mk == chosen_model)
@@ -150,37 +150,30 @@ def _stats(entry: dict[str, Any]) -> dict[str, Optional[float]]:
     }
 
 
-def _headline(cv: dict[str, Any], selected: str) -> None:
+def _headline(cv: dict[str, Any], selected: str, metrics: dict[str, Any]) -> None:
     w = _winner_entry(cv, selected)
     folds = w.get("cv_folds")
     stat_cards([
-        ("Selected model", selected, "Highest mean CV score"),
-        ("Selection metric", "ROC-AUC", "Ranking criterion"),
+        ("Selected model", selected, "Recorded training selection"),
+        ("Selection metric", metrics.get("selection_metric", "—"), "Recorded selection criterion"),
         ("Validation", f"{folds}-fold CV" if folds else "Cross-validation",
-         "Stratified, on TRAIN+VAL"),
+         metrics.get("selection_basis", "Not recorded")),
         ("Winning CV mean", f"{num(w.get('mean'), 4)} ± {num(w.get('std'), 4)}",
-         "Mean ROC-AUC across folds"),
+         "Recorded score across folds"),
     ])
 
 
-def _how_selected() -> None:
+def _how_selected(metrics: dict[str, Any]) -> None:
     st.markdown(
-        "**How the model was chosen.** Every candidate runs through the *same* "
-        "preprocessing pipeline, then is scored by **stratified 5-fold "
-        "cross-validation** on the combined train+validation data. The model "
-        "with the highest **mean ROC-AUC** wins; the standard deviation across "
-        "folds is reported so we can see whether the lead is stable."
+        f"**Recorded selection method:** {metrics.get('selection_basis', 'not recorded')}. "
+        f"**Selection metric:** {metrics.get('selection_metric', 'not recorded')}. "
+        "Cross-validation scores compare candidate configurations; the held-out test "
+        "report provides the separate final evaluation."
     )
     st.markdown(
-        "- **Why not accuracy?** The default rate here is only ~8%, so a model "
-        "that always predicts *repays* already scores ≈ 0.92 accuracy while "
-        "catching zero defaulters. Accuracy is never the selection metric.\n"
-        "- **Why cross-validation, not one split?** A single validation split "
-        "can be lucky. Averaging five held-out folds — and checking their spread "
-        "— makes the choice robust rather than an artefact of one partition.\n"
-        "- **Why ROC-AUC?** It scores how well the model *ranks* risk across all "
-        "thresholds, which is what we want when the operating cut-off is chosen "
-        "separately (see Model Performance)."
+        "Accuracy alone can hide missed positives in imbalanced data. Review "
+        "ROC-AUC, average precision, calibration, recall and precision together. "
+        "Fold variability is descriptive; it does not prove a statistically significant lead."
     )
 
 
@@ -207,8 +200,8 @@ def _cv_comparison(cv: dict[str, Any], selected: str) -> None:
     order = df.sort_values("mean", ascending=False)["Model"].tolist()
     base = alt.Chart(df)
     bars = base.mark_bar().encode(
-        x=alt.X("mean:Q", title="Mean ROC-AUC (5-fold)",
-                scale=alt.Scale(domain=[0.70, 0.77]), axis=alt.Axis(format=".3f")),
+        x=alt.X("mean:Q", title="Mean selection score",
+                scale=alt.Scale(zero=False), axis=alt.Axis(format=".3f")),
         y=alt.Y("Model:N", sort=order, title=None),
         color=alt.condition("datum.sel", alt.value(charts.ACCENT), alt.value(charts.MUTED)),
         tooltip=[alt.Tooltip("Model:N"),
@@ -220,9 +213,8 @@ def _cv_comparison(cv: dict[str, Any], selected: str) -> None:
     )
     charts.show(bars + err, height=230)
     st.caption(
-        "Bars = mean ROC-AUC across 5 stratified folds; whiskers = ±1 std. The "
-        "x-axis starts at 0.70 to resolve otherwise-close scores. "
-        f"**{selected}** (blue) has the highest mean."
+        "Bars = recorded mean selection scores; whiskers = ±1 standard deviation. "
+        f"**{selected}** is the recorded selected model."
     )
 
 
@@ -246,7 +238,7 @@ def _per_fold(cv: dict[str, Any], selected: str) -> None:
     df = pd.DataFrame(recs)
     order = df.groupby("Model")["score"].mean().sort_values(ascending=False).index.tolist()
     pts = alt.Chart(df).mark_circle(size=95, opacity=0.75).encode(
-        x=alt.X("score:Q", title="Fold ROC-AUC",
+        x=alt.X("score:Q", title="Fold selection score",
                 scale=alt.Scale(zero=False), axis=alt.Axis(format=".3f")),
         y=alt.Y("Model:N", sort=order, title=None),
         color=alt.condition("datum.sel", alt.value(charts.ACCENT), alt.value(charts.MUTED)),
@@ -268,8 +260,8 @@ def _per_fold(cv: dict[str, Any], selected: str) -> None:
         })
     st.dataframe(pd.DataFrame(trows), hide_index=True, use_container_width=True)
     st.caption(
-        "Each dot is one held-out fold. Tight clusters mean the ranking is "
-        "stable — the winner is not the product of a single favourable split."
+        "Each dot is one fold score. The spread describes variability on these "
+        "splits and is not a confidence interval or proof of generalization."
     )
 
 
@@ -284,22 +276,17 @@ def _why_winner(cv: dict[str, Any], selected: str) -> None:
         margin = top["mean"] - second["mean"]
         top_std = top.get("std") or 0.0
         st.markdown(
-            f"- **Highest mean ROC-AUC.** {top.get('display_name')} scored "
+            f"- **Highest recorded mean score.** {top.get('display_name')} scored "
             f"**{num(top['mean'], 4)}**, ahead of {second.get('display_name')} "
-            f"({num(second['mean'], 4)}) by **{num(margin, 4)}** — wider than its "
-            f"own fold-to-fold std (±{num(top_std, 4)}), so the lead is real, not "
-            f"noise."
+            f"({num(second['mean'], 4)}) by **{num(margin, 4)}**. Its "
+            f"fold standard deviation is ±{num(top_std, 4)}. This comparison "
+            "does not establish statistical significance."
         )
     st.markdown(
-        "- **Handles the 8% imbalance.** Gradient boosting with "
-        "`scale_pos_weight` (and `class_weight='balanced'` for the linear and "
-        "tree baselines) keeps the rare default class from being drowned out.\n"
-        "- **Captures non-linear interactions.** Boosted trees model interactions "
-        "between income, credit size and the external scores that the linear "
-        "baseline cannot, which is where its extra ranking power comes from.\n"
-        "- **Calibrated after selection.** The winner is refit on all training "
-        "data and wrapped in isotonic calibration, so its *probabilities* are "
-        "trustworthy (Brier 0.196 → 0.068), not just its ranking."
+        "Selection identifies the best candidate under the recorded criterion. "
+        "It does not certify an individual prediction. See Model Performance "
+        "for the measured calibration and test-set errors, and Model Information "
+        "for the saved training method."
     )
 
 

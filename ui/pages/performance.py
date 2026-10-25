@@ -60,16 +60,25 @@ def render() -> None:
     # ---- headline KPIs ----------------------------------------------------
     stat_cards([
         ("Test ROC-AUC", metric_value(test.get("roc_auc")), "Held-out test set ranking quality"),
-        ("Test PR-AUC", metric_value(test.get("pr_auc")), "Precision–recall AUC"),
-        ("Brier score", num(test.get("brier_score"), 4), "Probability calibration accuracy"),
-        ("Optimal F1", num(op_f1, 4), f"At calibrated cutoff {num(op_thr, 3)}"),
+        ("Test average precision", metric_value(test.get("pr_auc")), "Area summary of precision and recall"),
+        ("Brier score", num(test.get("brier_score"), 4), "Mean squared probability error"),
+        ("Test F1 at selected threshold", num(op_f1, 4), f"At recorded cutoff {num(op_thr, 3)}"),
     ])
     _pr_auc_lift(test)
 
     _operating_point(metrics, test)
     _validation_comparison(metrics)
-    _final_test_metrics(test)
-    _confusion_matrix(test)
+    operating_test = metrics.get("test_metrics_at_selected_threshold", test)
+    _final_test_metrics(operating_test)
+    _confusion_matrix(operating_test)
+    intervals = metrics.get("test_confidence_intervals", {})
+    if intervals.get("metrics"):
+        st.subheader("Sampling uncertainty")
+        st.dataframe(pd.DataFrame([
+            {"Metric": name, "95% lower": bounds["lower"], "95% upper": bounds["upper"]}
+            for name, bounds in intervals["metrics"].items()
+        ]), hide_index=True)
+        st.caption(intervals.get("note", ""))
     _threshold_analysis(metrics)
     _calibration(metrics)
 
@@ -110,24 +119,23 @@ def _operating_point(metrics: dict[str, Any], test: dict[str, Any]) -> None:
     op_recall = sel.get("test_recall")         # at the F1-optimal cut
     op_prec = sel.get("test_precision")
     st.markdown(
-        "A 0.5 cut-off is the **wrong** operating point when only ~8% of "
-        "applicants default: almost no one clears 0.5, so the model flags "
-        f"hardly anyone and misses most defaulters — test recall is just "
-        f"**{pct(base_recall)}**. The pipeline instead picks the **F1-optimal** "
-        f"threshold **{num(sel.get('value'), 4)}** on the *validation* split "
-        "(never the test set), then reports it on test. That single change "
-        f"lifts recall to **{pct(op_recall)}** at **{pct(op_prec)}** precision."
+        f"At threshold {num(test.get('threshold'), 3)}, test recall is "
+        f"**{pct(base_recall)}**. At the recorded selected threshold "
+        f"**{num(sel.get('value'), 4)}**, test recall is **{pct(op_recall)}** "
+        f"and precision is **{pct(op_prec)}**. "
+        f"Selection basis: {sel.get('selection_basis', 'not recorded')}."
     )
     stat_cards([
-        ("Recall at 0.5", pct(base_recall), "Defaulters caught at the raw cut"),
+        ("Recall at reference threshold", pct(base_recall), f"Threshold {num(test.get('threshold'), 3)}"),
         ("Operating threshold", num(sel.get("value"), 4),
-         "F1-optimal, chosen on validation"),
+         "Recorded selection result"),
         ("Recall at operating point", pct(op_recall), "Defaulters caught"),
         ("Precision at operating point", pct(op_prec), "Flags that truly default"),
     ])
     st.caption(
-        "The threshold is reported, not silently auto-applied at serving — the "
-        "operating point is a policy choice for a human, not the model's to make."
+        "The selected classification threshold trades recall against precision. "
+        "A statistical threshold is not a lending policy; the Result page records "
+        "the threshold actually used for each assessment."
     )
 
 
@@ -156,6 +164,7 @@ def _validation_comparison(metrics: dict[str, Any]) -> None:
     if rows:
         st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
         st.caption(f"Selected model: **{selected}** (by {metrics['selection_metric']}).")
+        st.caption("These comparison metrics describe uncalibrated candidates. The served models are calibrated; their validation metrics are stored separately in the release metadata.")
     else:
         st.info("No per-model validation results are available.")
 
@@ -195,10 +204,10 @@ def _threshold_analysis(metrics: dict[str, Any]) -> None:
     st.subheader("Threshold analysis")
     sel = metrics["selected_threshold"]
     st.caption(
-        f"F1-optimal threshold {sel['value']}, selected on validation "
+        f"Recorded threshold {sel['value']}; selection basis: {sel.get('selection_basis', 'not recorded')} "
         f"(val F1 {sel['val_f1']}) and reported on test (test F1 "
         f"{sel['test_f1']}, precision {sel['test_precision']}, recall "
-        f"{sel['test_recall']}). Not auto-applied at serving."
+        f"{sel['test_recall']}). The Result page records the threshold used for each assessment."
     )
 
     _threshold_chart(metrics)
@@ -262,8 +271,8 @@ def _threshold_chart(metrics: dict[str, Any]) -> None:
         layers = lines + rule
     charts.show(layers, height=300)
     st.caption(
-        f"Dashed line = deployed operating point ({num(sel, 4)}). Lowering the "
-        "threshold trades precision for recall; F1 peaks near the chosen point."
+        f"Dashed line = recorded selected threshold ({num(sel, 4)}). These test-set "
+        "curves describe sensitivity to the threshold; do not retune on the test set."
     )
 
 
@@ -279,9 +288,9 @@ def _calibration(metrics: dict[str, Any]) -> None:
     bb, ba = cal.get("brier_before"), cal.get("brier_after")
     if isinstance(bb, (int, float)) and isinstance(ba, (int, float)) and bb:
         st.caption(
-            f"Isotonic calibration cut the Brier score from {num(bb, 4)} to "
-            f"{num(ba, 4)} — a {pct(1 - ba / bb)} reduction. A well-calibrated "
-            "model sits on the diagonal: a predicted 20% really defaults ~20%."
+            f"Recorded Brier score before calibration: {num(bb, 4)}; after: "
+            f"{num(ba, 4)}. Lower is better. Calibration can improve or worsen "
+            "held-out performance; the curve below shows the observed result."
         )
     else:
         st.caption("Reliability of predicted probabilities after calibration.")
@@ -333,6 +342,6 @@ def _reliability_chart(cal: dict[str, Any]) -> None:
     )
     charts.show(diag + line, height=340)
     st.caption(
-        "Dashed diagonal = perfect calibration. The calibrated (After) curve "
-        "hugs the diagonal far more closely than the raw (Before) curve."
+        "Dashed diagonal = perfect calibration. Compare each curve with the "
+        "diagonal; small or sparse bins can be noisy."
     )

@@ -122,11 +122,8 @@ def global_importance(estimator, cfg: Config, top_k: int | None = None) -> dict[
                 "note": "Could not access underlying model(s) for importance.",
                 "features": []}
 
-    # Average each feature over the folds it actually appeared in. One-hot
-    # columns for rare categories can be absent from a fold whose training
-    # subset didn't contain that category; dividing by the global fold count
-    # would understate them, so we divide by per-feature presence instead.
-    mean_imp = {name: agg[name] / seen[name] for name in agg}
+    # Features absent from a fold contribute zero to the ensemble average.
+    mean_imp = {name: agg[name] / folds for name in agg}
     ranked = sorted(mean_imp.items(), key=lambda kv: kv[1], reverse=True)[:top_k]
     interpretation = "Association with predicted risk, not causation."
     if folds > 1:
@@ -201,10 +198,10 @@ def permutation_global_importance(
 
 
 FEATURE_LABELS = {
-    "EXT_SOURCE_MEAN": "Credit Bureau Composite Score",
-    "EXT_SOURCE_1": "Credit Bureau Score 1",
-    "EXT_SOURCE_2": "Credit Bureau Score 2",
-    "EXT_SOURCE_3": "Credit Bureau Score 3",
+    "EXT_SOURCE_MEAN": "Mean External Source Score",
+    "EXT_SOURCE_1": "External Source Score 1",
+    "EXT_SOURCE_2": "External Source Score 2",
+    "EXT_SOURCE_3": "External Source Score 3",
     "AMT_INCOME_TOTAL": "Annual Declared Income",
     "AMT_CREDIT": "Loan Credit Amount",
     "AMT_ANNUITY": "Loan Annuity (Periodic Payment)",
@@ -220,10 +217,10 @@ FEATURE_LABELS = {
     "CREDIT_GOODS_RATIO": "Credit to Goods Price Ratio",
     "EMPLOYMENT_AGE_RATIO": "Employment-to-Age Ratio",
     "INCOME_PER_FAM_MEMBER": "Income Per Family Member",
-    "DAYS_EMPLOYED_MISSING": "Pensioner / Not Formally Employed",
-    "EXT_SOURCE_1_MISSING": "Missing Credit Bureau Score 1",
-    "EXT_SOURCE_2_MISSING": "Missing Credit Bureau Score 2",
-    "EXT_SOURCE_3_MISSING": "Missing Credit Bureau Score 3",
+    "DAYS_EMPLOYED_MISSING": "Employment Duration Missing",
+    "EXT_SOURCE_1_MISSING": "Missing External Source Score 1",
+    "EXT_SOURCE_2_MISSING": "Missing External Source Score 2",
+    "EXT_SOURCE_3_MISSING": "Missing External Source Score 3",
 }
 
 
@@ -249,36 +246,12 @@ def get_feature_display_label(name: str) -> str:
 
 
 def get_feature_reason(name: str, label: str, contribution: float, direction: str) -> str:
-    """Generate professional, plain-English rationale for risk attribution."""
-    mag = abs(contribution)
-    impact = "High" if mag > 0.15 else ("Moderate" if mag > 0.05 else "Mild")
-
-    if direction == "increases_risk":
-        if "CREDIT_INCOME" in name or "ANNUITY_INCOME" in name or "CREDIT" in name and "RATIO" in name:
-            return f"High loan obligation relative to income elevates default probability ({impact} impact)"
-        elif "EXT_SOURCE" in name:
-            return f"Low external credit rating indicates elevated historical credit risk ({impact} impact)"
-        elif "AGE" in name:
-            return f"Age bracket statistically correlated with higher financial volatility ({impact} impact)"
-        elif "EMPLOYMENT" in name:
-            return f"Shorter or less established employment history raises risk ({impact_level(mag)})"
-        elif "EDUCATION" in name:
-            return f"Educational tier historically correlated with repayment sensitivity ({impact_level(mag)})"
-        elif "MISSING" in name:
-            return f"Absence of external credit history increases lending uncertainty ({impact_level(mag)})"
-        return f"Feature value shifts risk profile upward (+{contribution:.3f})"
-    else:
-        if "EXT_SOURCE" in name:
-            return f"Strong credit bureau score demonstrates reliable repayment history ({impact} impact)"
-        elif "EDUCATION" in name:
-            return f"Higher educational attainment associated with career and income stability ({impact} impact)"
-        elif "EMPLOYMENT" in name:
-            return f"Established employment tenure provides strong repayment stability ({impact} impact)"
-        elif "INCOME" in name:
-            return f"Adequate declared earnings support monthly debt service capacity ({impact} impact)"
-        elif "RATIO" in name:
-            return f"Favorable debt-to-income balance reduces default likelihood ({impact} impact)"
-        return f"Feature value supports applicant creditworthiness ({contribution:.3f})"
+    """Describe only the measured attribution, without inventing applicant facts."""
+    movement = {"increases_risk": "raises", "decreases_risk": "lowers"}.get(direction)
+    if movement is None or contribution == 0:
+        return f"{label}: no signed local effect established."
+    return (f"{label} {movement} the explained base-model output relative to its "
+            f"reference ({contribution:+.4f} output units). Association, not causation.")
 
 
 def impact_level(mag: float) -> str:
@@ -327,7 +300,12 @@ def local_explanation(estimator, X_row: pd.DataFrame, cfg: Config,
                     "positive_drivers": pos_drivers,
                     "negative_drivers": neg_drivers,
                     "summary_text": _summarize_drivers(pos_drivers, neg_drivers),
-                    "interpretation": "SHAP values: exact signed contribution to the model's risk output for this applicant.",
+                    "scope": "uncalibrated_base_estimator",
+                    "output_space": "raw_margin" if model.__class__.__module__.startswith("xgboost") else "probability",
+                    "interpretation": ("Signed SHAP values for one uncalibrated base estimator. "
+                        "For a calibrated ensemble this explains only its first fold, not the "
+                        "served calibrated probability. Contributions are not percentage points "
+                        "of the served probability or causal/adverse-action reasons."),
                 }
         except Exception:  # fall through to native
             pass
@@ -348,7 +326,11 @@ def local_explanation(estimator, X_row: pd.DataFrame, cfg: Config,
             "positive_drivers": pos_drivers,
             "negative_drivers": neg_drivers,
             "summary_text": _summarize_drivers(pos_drivers, neg_drivers),
-            "interpretation": "Approximate signed contribution (coefficient x standardized feature value).",
+            "scope": "uncalibrated_base_estimator",
+            "output_space": "log_odds",
+            "interpretation": ("Coefficient times transformed feature value in base-model log-odds. "
+                "Only the first fold is explained for a calibrated ensemble; this does not "
+                "decompose its served probability and is not causal evidence."),
         }
 
     # --- Tree fallback without SHAP: use global importances (unsigned) ---
@@ -362,8 +344,10 @@ def local_explanation(estimator, X_row: pd.DataFrame, cfg: Config,
             "positive_drivers": [],
             "negative_drivers": [],
             "summary_text": "Model tree split importance approximation.",
-            "note": "Showing model feature importances as an APPROXIMATION.",
-            "interpretation": "Feature association with overall model risk splits.",
+            "note": "Global, unsigned importances; not an applicant-specific explanation.",
+            "scope": "global_model",
+            "output_space": "importance",
+            "interpretation": "Global split importance has no local direction or applicant-specific effect.",
         }
 
     return {"method": "unavailable", "contributions": [],
@@ -408,20 +392,16 @@ def _extract_shap_row(sv, n_features: int) -> np.ndarray | None:
 def _rank_contributions(names, values, top_k: int, signed: bool = True) -> list[dict]:
     values = np.asarray(values, dtype=float)
     n = min(len(names), len(values))
-    # Exclude legally protected demographic attributes (CODE_GENDER) from risk attribution
-    valid_indices = [
-        i for i in range(n)
-        if not str(names[i]).startswith("CODE_GENDER")
-    ]
-    if not valid_indices:
-        valid_indices = list(range(n))
+    # Include every input used by the model; hiding a sensitive contribution
+    # would conceal model behavior rather than mitigate it.
+    valid_indices = list(range(n))
 
     order = sorted(valid_indices, key=lambda i: abs(values[i]), reverse=True)[:top_k]
     out = []
     for i in order:
         feat_name = str(names[i])
         val = float(values[i])
-        direction = ("increases_risk" if val > 0 else "decreases_risk") if signed else "n/a"
+        direction = ("increases_risk" if val > 0 else "decreases_risk" if val < 0 else "neutral") if signed else "n/a"
         label = get_feature_display_label(feat_name)
         reason = get_feature_reason(feat_name, label, val, direction) if signed else "General model association"
         out.append({

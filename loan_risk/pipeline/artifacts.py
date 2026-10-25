@@ -15,6 +15,7 @@ feature_schema.json once, cached; it NEVER retrains.
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,26 @@ MODEL_FILE = "model.joblib"
 METADATA_FILE = "metadata.json"
 FEATURE_SCHEMA_FILE = "feature_schema.json"
 METRICS_FILE = "metrics.json"
+
+
+def file_sha256(path: Path) -> str:
+    with path.open("rb") as fh:
+        return hashlib.file_digest(fh, "sha256").hexdigest()
+
+
+def verify_bundle(cfg: Config, metadata: dict[str, Any]) -> None:
+    """Reject mixed/corrupt runs before loading pickle data. Local artifacts
+    must still be trusted: checksums detect accidental changes, not attackers."""
+    root = cfg.path("artifacts").resolve()
+    hashes = metadata.get("file_hashes", {})
+    if hashes and not {MODEL_FILE, METRICS_FILE, FEATURE_SCHEMA_FILE} <= hashes.keys():
+        raise ValueError("Artifact bundle lacks required checksums.")
+    for name, expected in hashes.items():
+        path = (root / name).resolve()
+        if not path.is_relative_to(root) or not path.is_file():
+            raise ValueError("Artifact bundle is incomplete or has an invalid path.")
+        if file_sha256(path) != expected:
+            raise ValueError("Artifact checksum mismatch; retrain or restore the complete bundle.")
 
 
 def build_feature_schema() -> dict[str, Any]:
@@ -61,7 +82,7 @@ def save_model(estimator, cfg: Config) -> Path:
     out = cfg.path("artifacts")
     out.mkdir(parents=True, exist_ok=True)
     path = out / MODEL_FILE
-    joblib.dump(estimator, path)
+    joblib.dump(estimator, path, compress=3)
     return path
 
 
@@ -70,7 +91,7 @@ def save_json(obj: dict[str, Any], filename: str, cfg: Config) -> Path:
     out.mkdir(parents=True, exist_ok=True)
     path = out / filename
     with path.open("w", encoding="utf-8") as fh:
-        json.dump(obj, fh, indent=2, default=str)
+        json.dump(obj, fh, indent=2, default=str, allow_nan=False)
     return path
 
 
@@ -86,9 +107,12 @@ def artifacts_exist(cfg: Config) -> bool:
 def load_model(cfg: Config, model_key: str | None = None):
     out = cfg.path("artifacts")
     if model_key:
+        if model_key not in load_metadata(cfg).get("candidate_details", {}):
+            raise ValueError("Requested model is not registered in this training run.")
         candidate_path = out / "models" / f"{model_key}.joblib"
         if candidate_path.exists():
             return joblib.load(candidate_path)
+        raise FileNotFoundError("Registered candidate model is missing.")
     path = out / MODEL_FILE
     if not path.exists():
         raise FileNotFoundError(
@@ -99,18 +123,16 @@ def load_model(cfg: Config, model_key: str | None = None):
 
 
 def load_all_models(cfg: Config) -> dict[str, Any]:
-    """Load all available candidate models from artifacts/models/."""
+    """Load only candidates registered and hashed in the same training run."""
     models_dir = cfg.path("artifacts") / "models"
     result: dict[str, Any] = {}
-    if models_dir.exists():
-        for f in models_dir.glob("*.joblib"):
-            key = f.stem
-            try:
-                result[key] = joblib.load(f)
-            except Exception:
-                pass
-    if not result and (cfg.path("artifacts") / MODEL_FILE).exists():
-        result["xgboost"] = joblib.load(cfg.path("artifacts") / MODEL_FILE)
+    metadata = load_metadata(cfg)
+    verify_bundle(cfg, metadata)
+    for key in metadata.get("candidate_details", {}):
+        relative = f"models/{key}.joblib"
+        if relative not in metadata.get("file_hashes", {}):
+            raise ValueError("Candidate model lacks run-integrity evidence.")
+        result[key] = joblib.load(models_dir / f"{key}.joblib")
     return result
 
 

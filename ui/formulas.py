@@ -27,8 +27,8 @@ METRIC_DEFINITIONS: dict[str, tuple[str, str, str]] = {
         "PR-AUC (average precision)",
         r"\text{AP} = \sum_k \big(R_k - R_{k-1}\big)\,P_k",
         "Area under the precision–recall curve. The right summary for rare "
-        "positives: its no-skill baseline equals the positive rate (≈ 0.081 "
-        "here), so anything above that is lift over guessing.",
+        "positives: its no-skill baseline equals the dataset positive rate; "
+        "compare measured average precision against that baseline.",
     ),
     "brier": (
         "Brier score",
@@ -40,8 +40,8 @@ METRIC_DEFINITIONS: dict[str, tuple[str, str, str]] = {
     "precision": (
         "Precision",
         r"\text{Precision} = \frac{TP}{TP + FP}",
-        "Of the applicants the model flags, the share that truly default. Falls "
-        "as the threshold drops (more false alarms).",
+        "Of the applicants the model flags, the share that truly default. May fall "
+        "as the threshold drops; this relationship is not necessarily monotonic.",
     ),
     "recall": (
         "Recall (TPR / sensitivity)",
@@ -60,7 +60,7 @@ METRIC_DEFINITIONS: dict[str, tuple[str, str, str]] = {
         "Accuracy",
         r"\text{Accuracy} = \frac{TP + TN}{TP + TN + FP + FN}",
         "Share of all predictions that are correct. Misleading under imbalance: "
-        "always predicting 'repays' already scores ≈ 0.92 here, which is why "
+        "always predicting the majority class can score highly, which is why "
         "accuracy is never the selection metric.",
     ),
     "fpr": (

@@ -11,19 +11,27 @@ can display exactly how the number is derived.
 from __future__ import annotations
 
 from typing import Any
+import math
 
 from ..config import Config
 
 
+def _finite_probability(prob: float) -> float:
+    prob = float(prob)
+    if not math.isfinite(prob):
+        raise ValueError("Probability must be finite.")
+    return max(0.0, min(1.0, prob))
+
+
 def probability_to_score(prob: float) -> int:
     """Map default probability to a 0..100 risk score: round(prob * 100)."""
-    prob = max(0.0, min(1.0, float(prob)))
+    prob = _finite_probability(prob)
     return int(round(prob * 100.0))
 
 
 
 def probability_to_band(prob: float, cfg: Config) -> str:
-    prob = max(0.0, min(1.0, float(prob)))
+    prob = _finite_probability(prob)
     bands = cfg.get("risk_score", {}).get("bands", [])
     if not bands:
         # Fallback default calibrated bands
@@ -42,30 +50,16 @@ def probability_to_band(prob: float, cfg: Config) -> str:
 
 
 def probability_to_decision(prob: float, threshold: float = 0.166) -> dict[str, Any]:
-    """Derive binary prediction (TARGET=0 vs 1) and loan recommendation.
-
-    Threshold defaults to 0.166 (the validation-optimal F1 operating point).
-    """
-    prob = max(0.0, min(1.0, float(prob)))
+    """Describe an analytical threshold flag, never a lending decision."""
+    prob = _finite_probability(prob)
+    if not math.isfinite(threshold) or not 0 <= threshold <= 1:
+        raise ValueError("Threshold must be finite and between zero and one.")
     predicted_target = 1 if prob >= threshold else 0
-    target_label = "Payment Difficulty / Default" if predicted_target == 1 else "Repayment Expected"
-
-    if prob < 0.06:
-        recommendation = "Approved (Low Default Risk)"
-        badge_color = "#059669"  # emerald
-        action = "Eligible for prime financing, standard loan limits, and optimal interest rates."
-    elif prob < 0.15:
-        recommendation = "Conditional / Manual Review"
-        badge_color = "#d97706"  # amber
-        action = "Acceptable risk profile. Recommend secondary income and employment verification."
-    elif prob < 0.25:
-        recommendation = "High Risk / Strict Terms"
-        badge_color = "#ea580c"  # orange
-        action = "Elevated default probability. Requires creditworthy co-signer or 25%+ collateral."
-    else:
-        recommendation = "Declined (Critical Default Risk)"
-        badge_color = "#dc2626"  # red
-        action = "Exceeds acceptable default risk threshold. Substantial repayment difficulty predicted."
+    target_label = "At or above model threshold" if predicted_target else "Below model threshold"
+    recommendation = "Elevated risk — analyst review" if predicted_target else "Below review threshold"
+    badge_color = "#d97706" if predicted_target else "#059669"
+    action = ("Review verified application information and model limitations. "
+              "This estimate does not determine approval, pricing, collateral, or repayment.")
 
     return {
         "predicted_target": predicted_target,
@@ -89,6 +83,6 @@ def score_definition(cfg: Config) -> dict[str, Any]:
         ],
         "disclaimer": (
             "The risk score is an analytical estimate of default probability, "
-            "designed to assist credit analysts with empirical data-driven insights."
+            "not a lending decision or guarantee. Independent human review is required."
         ),
     }

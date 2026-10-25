@@ -4,7 +4,7 @@ Features:
   * Quick-test profile presets (Prime, Standard, Subprime) for instantaneous demo.
   * Model Selector (XGBoost, Random Forest, Decision Tree, Logistic Regression).
   * Feature schema driven input controls with clean labels and hints.
-  * Instantaneous lending decision, risk score, probability, and target output.
+  * Analytical review flag, risk score, probability, and target output.
 """
 from __future__ import annotations
 
@@ -22,12 +22,12 @@ from ui.helpers import (
     stat_cards,
     synthetic_warning,
 )
-from ui.state import save_prediction
+from ui.state import clear_prediction, save_prediction
 
 PRESETS = {
     "prime": {
-        "title": "🟢 Prime Profile (Low Risk)",
-        "desc": "High income, low loan, top credit ratings (0.85+), 12-yr employment tenure.",
+        "title": "Higher external scores",
+        "desc": "Illustrative inputs: higher income, smaller loan, longer employment.",
         "data": {
             "AMT_INCOME_TOTAL": 250000.0,
             "AMT_CREDIT": 300000.0,
@@ -53,8 +53,8 @@ PRESETS = {
         },
     },
     "standard": {
-        "title": "🟡 Standard Profile (Moderate Risk)",
-        "desc": "Average income, moderate debt, 3-yr employment, mid-range credit scores (~0.50).",
+        "title": "Mid-range external scores",
+        "desc": "Illustrative inputs: mid-range external scores and 3-year employment.",
         "data": {
             "AMT_INCOME_TOTAL": 120000.0,
             "AMT_CREDIT": 450000.0,
@@ -80,8 +80,8 @@ PRESETS = {
         },
     },
     "subprime": {
-        "title": "🔴 Subprime Profile (High Risk)",
-        "desc": "Low income, heavy loan request, 3 months employment, poor credit history (<0.10).",
+        "title": "Lower external scores",
+        "desc": "Illustrative inputs: lower income, larger loan, shorter employment.",
         "data": {
             "AMT_INCOME_TOTAL": 30000.0,
             "AMT_CREDIT": 800000.0,
@@ -109,6 +109,23 @@ PRESETS = {
 }
 
 
+def apply_preset(key: str) -> None:
+    """Update widget state before the form renders, including on repeat clicks."""
+    data = dict(PRESETS[key]["data"])
+    st.session_state["form_preset"] = key
+    st.session_state["form_data"] = data
+    for name, value in data.items():
+        st.session_state[f"inp_{name}"] = value
+
+
+def reset_assessment() -> None:
+    """Discard the previous applicant and every form widget value."""
+    clear_prediction()
+    for key in list(st.session_state):
+        if key.startswith("inp_") or key in {"form_data", "form_preset"}:
+            st.session_state.pop(key, None)
+
+
 def render() -> None:
     service = get_service()
     require_model(service)
@@ -117,7 +134,7 @@ def render() -> None:
 
     page_header(
         "Loan Risk Assessment",
-        "Predict loan repayment difficulty, calibrated risk score, and lending recommendation using trained ML models.",
+        "Estimate payment-difficulty risk for analyst review. This tool does not approve or decline loans.",
     )
 
     synthetic_warning(
@@ -134,10 +151,8 @@ def render() -> None:
     cols = st.columns(3)
     for col, (pkey, pval) in zip(cols, PRESETS.items()):
         with col:
-            if st.button(pval["title"], key=f"btn_preset_{pkey}", use_container_width=True):
-                st.session_state["form_preset"] = pkey
-                st.session_state["form_data"] = pval["data"]
-                st.rerun()
+            st.button(pval["title"], key=f"btn_preset_{pkey}", use_container_width=True,
+                      on_click=apply_preset, args=(pkey,))
             st.caption(pval["desc"])
 
     current_data = st.session_state.get("form_data", {})
@@ -152,13 +167,13 @@ def render() -> None:
             "🧠 Select ML Model for Prediction",
             options=list(avail_models.keys()),
             format_func=lambda k: avail_models.get(k, k),
-            index=0,
+            index=list(avail_models).index(mi["model_key"]) if mi.get("model_key") in avail_models else 0,
             help="Choose which trained machine learning model evaluates this applicant.",
         )
     with col_m2:
         st.caption(
-            "All candidate models are fitted and calibrated on the training split. "
-            "You can evaluate this applicant with any model or compare all models on the Result page."
+            "Only models available in this artifact release are listed. "
+            "Sample profiles are demonstrations, not verified borrower outcomes."
         )
 
     numeric = schema.get("numeric_features") or []
@@ -187,8 +202,8 @@ def render() -> None:
             with (c5 if i % 2 == 0 else c6):
                 values[f["name"]] = _categorical_input(f, current_data.get(f["name"]))
 
-        st.subheader("3. External Credit Bureau Ratings (Normalized 0.0 - 1.0)")
-        st.caption("Credit bureau score from external credit rating agencies. Higher score = better creditworthiness.")
+        st.subheader("3. Normalized External Scores (0.0–1.0)")
+        st.caption("Use the dataset's external-source scores only. Their providers and exact definitions are undisclosed; do not substitute a commercial credit score.")
         c7, c8, c9 = st.columns(3)
         for i, f in enumerate(external):
             with [c7, c8, c9][i % 3]:
@@ -251,6 +266,7 @@ def _categorical_input(f: dict[str, Any], preset_val: Any = None) -> str | None:
 
 
 def _handle_submit(service: Any, values: dict[str, Any], selected_model: str) -> None:
+    clear_prediction()
     payload = {
         name: val for name, val in values.items()
         if val is not None and not (isinstance(val, str) and val == "—")
@@ -263,7 +279,11 @@ def _handle_submit(service: Any, values: dict[str, Any], selected_model: str) ->
             st.error(f"• **{e['field']}**: {e['message']}")
         return
 
-    result = service.predict(normalized, model_key=selected_model)
+    try:
+        result = service.predict(normalized, model_key=selected_model)
+    except (ValueError, RuntimeError):
+        st.error("Assessment could not be completed. Check the inputs and model availability; no new result was saved.")
+        return
     save_prediction(normalized, result)
 
     st.success(
@@ -278,7 +298,7 @@ def _handle_submit(service: Any, values: dict[str, Any], selected_model: str) ->
         <div style="background:{dec_color}1a;border:2px solid {dec_color};border-radius:10px;padding:16px 20px;margin-bottom:18px;">
             <div style="display:flex;justify-content:space-between;align-items:center;">
                 <div>
-                    <span style="font-size:0.85rem;font-weight:600;text-transform:uppercase;color:{dec_color};letter-spacing:0.05em;">Lending Recommendation</span>
+                    <span style="font-size:0.85rem;font-weight:600;text-transform:uppercase;color:{dec_color};letter-spacing:0.05em;">Analyst Review Indicator</span>
                     <h2 style="margin:2px 0 6px;color:{dec_color};font-weight:800;">{result.get('decision', 'Assessment Complete')}</h2>
                     <p style="margin:0;font-size:0.95rem;color:#334155;">{result.get('decision_action', '')}</p>
                 </div>
@@ -297,10 +317,12 @@ def _handle_submit(service: Any, values: dict[str, Any], selected_model: str) ->
 
     stat_cards([
         ("Default Probability", pct(result["default_probability"], 1), f"Cutoff: {pct(result.get('decision_threshold', 0.166), 1)}"),
-        ("Calibrated Risk Score", f"{result['risk_score']} / 100", "0 = Lowest Risk, 100 = Maximum Risk"),
-        ("Risk Band", result["risk_band"], "Calibrated Risk Category"),
+        ("Risk Score", f"{result['risk_score']} / 100", "Rounded probability × 100"),
+        ("Risk Band", result["risk_band"], "Configured probability interval"),
         ("Active Model", result.get("model_name", selected_model).split("(")[0].strip(), "Model Used"),
     ])
+    for limitation in result.get("limitations", []):
+        st.caption(limitation)
 
     st.markdown(
         f"<div style='margin-top:10px;'>{risk_band_badge(result['risk_band'])} &nbsp; "

@@ -77,13 +77,14 @@ calibration:
 evaluation:
   # Model selected by this metric (NOT accuracy alone — 03_ML_REQUIREMENTS.md).
   selection_metric: "roc_auc"
+  bootstrap_repeats: 200
 
 selection:
-  # Model selection uses stratified k-fold cross-validation on TRAIN+VAL and
+  # Model selection uses stratified k-fold cross-validation on TRAIN only and
   # picks the best MEAN score (std reported), instead of a single-split argmax,
   # so selection is not one lucky split. Set to 1 to fall back to the single
   # held-out validation split.
-  cv_folds: 5
+  cv_folds: 3
 
 tuning:
   # Opt-in hyperparameter search (RandomizedSearchCV) for the heavier models.
@@ -91,9 +92,9 @@ tuning:
   # refit on the full training data. Disable for a fast, fixed-config run.
   enabled: true
   models: ["random_forest", "xgboost"]
-  n_iter: 8
+  n_iter: 4
   cv_folds: 3
-  max_search_samples: 40000
+  max_search_samples: 30000
   # Distributions are sampled uniformly (lists). Keys are pipeline-scoped
   # (model__<param>) so they target the estimator inside the Pipeline.
   param_distributions:
@@ -110,7 +111,7 @@ tuning:
 
 risk_score:
   # Transparent, calibrated mapping from probability -> 0..100 score.
-  # Threshold matches the validation-optimal operating point for binary decision.
+  # Legacy fallback only. New artifacts persist their own validation threshold.
   threshold: 0.166
   bands:
     - { name: "Low",       min_prob: 0.00, max_prob: 0.06 }

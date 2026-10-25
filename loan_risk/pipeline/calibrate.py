@@ -1,7 +1,7 @@
 """Probability calibration (03_ML_REQUIREMENTS.md).
 
 Wraps the selected fitted pipeline in CalibratedClassifierCV using cross-
-validation on the TRAIN+VAL data only (the test set stays untouched until final
+validation on the TRAIN data only (the test set stays untouched until final
 evaluation). We report Brier score before vs after so the calibration claim is
 evidence-backed, never asserted.
 """

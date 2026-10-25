@@ -9,10 +9,10 @@ This document states plainly what the system is, what it is **not**, and what ha
 
 ## 1. Purpose
 
-- The system estimates a **default probability** and derives a transparent 0–100 risk score and a risk band (Low / Moderate / Elevated / High, defined on probability in `config/config.yaml: risk_score.bands`). The score mapping is explicit: `risk_score = round(default_probability * 100)`.
+- The system estimates a **default probability** and derives a transparent 0–100 risk score and a risk band (Low / Moderate / High / Critical, defined on probability in `config/config.yaml: risk_score.bands`). The score mapping is explicit: `risk_score = round(default_probability * 100)`.
 - Its purpose is to **support human review** — to help a qualified reviewer rank, flag, and reason about applications. It is an analytical input to a person's judgment, not a verdict.
 - It is **not a loan-approval system.** It predicts repayment difficulty, not an approval label. Any approval workflow, if one is ever built, must remain **separate** from this default-risk model (`01_PROJECT_CONTEXT.md`).
-- It is **not an autonomous decision-maker.** The API itself describes its outputs as _"analytical estimates, NOT autonomous lending decisions"_ (`backend/main.py`), and the model metadata carries a matching responsible-use note (`artifacts/metadata.json`).
+- It is **not an autonomous decision-maker.** The in-process service returns analyst review indicators and limitations; the model metadata carries the corresponding responsible-use note.
 
 ---
 
@@ -58,13 +58,13 @@ This document states plainly what the system is, what it is **not**, and what ha
 
 ## 6. Privacy and Data Handling
 
-Grounded in the current code (`backend/main.py`) and `.gitignore`:
+Grounded in `loan_risk/serving/service.py`, `ui/state.py`, and `.gitignore`:
 
-- **Applicant PII is not logged.** The service does not log the request body. Startup logging is limited to model name/version, and the global error handler logs only the request **path** (`logger.exception("Unhandled error on %s", request.url.path)`), never the applicant payload.
-- **The API returns no stack traces or internal paths.** Errors return a consistent `ErrorResponse` schema with generic messages; internal exceptions are logged server-side only and are not surfaced to the caller.
-- **Secrets are kept out of source control.** `.gitignore` excludes `.env` / `.env.*` (keeping only `.env.example`), `kaggle.json`, `*.pem`, `*.key`, and `secrets/`. Raw/processed/synthetic data directories and trained artifacts are also git-ignored.
-- **No persistence of submissions.** Predictions are computed in-process from the submitted payload; this build defines no store for applicant submissions. If one is added, it must address retention, access control, consent, and applicable data-protection obligations — none of which are handled today.
-- **Not verified / out of scope.** There is **no authentication or access control** on the API endpoints in this build — any client that can reach the service can request a prediction. No penetration test, PII-handling audit, or transport-security (TLS) review has been performed. These must be addressed before any non-local deployment.
+- The service does not deliberately log applicant payloads or persist submissions. Inputs and results remain in Streamlit session state until cleared or the session ends.
+- Validation failures return field errors; model-loading failures expose generic messages. Exception diagnostics are logged server-side for maintenance; deployment logging needs an independent privacy review.
+- There is no separate HTTP prediction API in this build. Streamlit calls the Python service directly.
+- Secrets and raw datasets are excluded from source control. Trained model artifacts are tracked for the local demo; do not treat them as anonymized raw datasets or load untrusted joblib files.
+- There is no authentication, role-based access, durable audit history, retention policy, or TLS termination in this application. Local functional testing is not a security or privacy certification.
 
 ---
 
@@ -83,8 +83,8 @@ Grounded in the current code (`backend/main.py`) and `.gitignore`:
 | Item | Status |
 |---|---|
 | Purpose framing (default-risk estimate, human-oversight tool) | Stated and enforced in code/config |
-| Applicant PII kept out of logs | Verified by reading `backend/main.py` logging call sites |
-| No stack traces / internal paths returned to clients | Verified in `backend/main.py` error handlers |
+| Applicant PII kept out of logs | Service payload logging is absent; independent deployment review remains needed |
+| No stack traces / internal paths returned to clients | Generic model-load and UI inference errors; no standalone HTTP API |
 | Secrets excluded from source control | Verified in `.gitignore` |
 | Fairness / subgroup performance | **NOT validated** — no fairness or bias audit exists |
 | Legal / regulatory review (ECOA, FCRA, GDPR) | **NOT performed** |

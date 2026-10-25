@@ -13,9 +13,10 @@ Persistence seam: `persist_prediction` is a no-op stub returning None now
 from __future__ import annotations
 
 import logging
-import uuid
+from datetime import datetime, timezone
 from typing import Any, Optional
 
+import numpy as np
 import pandas as pd
 
 from loan_risk.config import Config, load_config
@@ -29,6 +30,7 @@ from loan_risk.pipeline.risk_score import (
     score_definition,
 )
 from loan_risk.schema import categorical_names, numeric_names
+from loan_risk.serving.validation import validate_payload, OPTIONAL_FIELDS
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +55,7 @@ LIMITATIONS_BASE = [
 ]
 
 MODEL_DISPLAY_NAMES = {
-    "xgboost": "XGBoost (Best Performer - Calibrated)",
+    "xgboost": "XGBoost",
     "random_forest": "Random Forest (Ensemble Classifier)",
     "decision_tree": "Decision Tree (Interpretable Tree)",
     "logistic_regression": "Logistic Regression (Linear Baseline)",
@@ -75,17 +77,31 @@ class ModelService:
     # -- lifecycle ------------------------------------------------------
     def _try_load(self) -> None:
         try:
+            self.metadata = artifacts.load_metadata(self.cfg)
+            artifacts.verify_bundle(self.cfg, self.metadata)
             self.model = artifacts.load_model(self.cfg)
             self.models = artifacts.load_all_models(self.cfg)
-            if not self.models and self.model is not None:
-                self.models["xgboost"] = self.model
-            self.metadata = artifacts.load_metadata(self.cfg)
+            selected = self.metadata.get("model_key")
+            if not selected:
+                raise ValueError("Artifact metadata is missing the selected model identity.")
+            self.models[selected] = self.model
+            self.scoring_cfg = Config(self.cfg.raw | {
+                "risk_score": self.metadata.get("risk_score_config", self.cfg["risk_score"])
+            }, self.cfg.root)
             self.feature_schema = artifacts.load_feature_schema(self.cfg)
+            self._metrics = artifacts.load_json(artifacts.METRICS_FILE, self.cfg)
+            self._manifest = (artifacts.load_json("dataset_manifest.json", self.cfg)
+                              if "dataset_manifest.json" in self.metadata.get("file_hashes", {}) else None)
+            self._validation_report = (artifacts.load_json("validation_report.json", self.cfg)
+                                       if "validation_report.json" in self.metadata.get("file_hashes", {}) else None)
+            if (self.metadata.get("file_hashes") and
+                    self._metrics.get("model_version") != self.metadata.get("model_version")):
+                raise ValueError("Model and evaluation report versions disagree.")
             self._load_error = None
         except FileNotFoundError as exc:
             self.model = None
             self.models = {}
-            self._load_error = str(exc)
+            self._load_error = "Required model artifacts are missing. Run training first."
         except Exception as exc:  # noqa: BLE001
             logger.exception("Model artifacts could not be loaded")
             self.model = None
@@ -102,13 +118,8 @@ class ModelService:
 
     def get_available_models(self) -> dict[str, str]:
         """Return dict of {model_key: display_name}."""
-        res = {}
-        for key in ["xgboost", "random_forest", "decision_tree", "logistic_regression"]:
-            if key in self.models:
-                res[key] = MODEL_DISPLAY_NAMES.get(key, key.replace("_", " ").title())
-        if not res and self.available:
-            res["xgboost"] = MODEL_DISPLAY_NAMES["xgboost"]
-        return res
+        return {key: MODEL_DISPLAY_NAMES.get(key, key.replace("_", " ").title())
+                for key in self.models}
 
     # -- input transformation ------------------------------------------
     def to_model_frame(self, payload: dict[str, Any]) -> pd.DataFrame:
@@ -122,7 +133,35 @@ class ModelService:
             row[flag] = 1 if payload.get(col, None) is None else 0
         for name in categorical_names():
             row[name] = payload.get(name, None)
-        return pd.DataFrame([row])
+        # Match training missing-value semantics: SimpleImputer expects NaN,
+        # not Python None in object columns or all-missing numeric columns.
+        frame = pd.DataFrame([row])
+        for name in numeric_names():
+            frame[name] = pd.to_numeric(frame[name], errors="raise").astype(float)
+        for name in categorical_names():
+            frame[name] = frame[name].where(frame[name].notna(), np.nan)
+        return frame
+
+    @staticmethod
+    def _probability(model, X) -> float:
+        classes = list(model.classes_)
+        if classes != [0, 1]:
+            raise ValueError("Model classes must be [0, 1].")
+        probabilities = np.asarray(model.predict_proba(X), dtype=float)
+        if (probabilities.shape != (1, 2) or not np.isfinite(probabilities).all()
+                or (probabilities < 0).any() or (probabilities > 1).any()
+                or not np.allclose(probabilities.sum(axis=1), 1)):
+            raise ValueError("Model returned an invalid probability distribution.")
+        return float(probabilities[0, 1])
+
+    def _threshold(self, key: str) -> tuple[float, str]:
+        details = self.metadata.get("candidate_details", {}).get(key, {})
+        threshold = details.get("decision_threshold")
+        if threshold is None and key == self.metadata.get("model_key"):
+            threshold = self.metadata.get("decision_threshold")
+        if threshold is not None:
+            return float(threshold), "held_out_validation_f1"
+        return float(self.cfg.get("risk_score", {}).get("threshold", 0.5)), "configured_unvalidated"
 
     # -- prediction -----------------------------------------------------
     def predict(
@@ -135,24 +174,22 @@ class ModelService:
         if not self.available:
             raise RuntimeError("Model not loaded.")
 
-        target_model = None
-        chosen_key = model_key or "xgboost"
-        if chosen_key in self.models:
-            target_model = self.models[chosen_key]
-        elif self.model is not None:
-            target_model = self.model
-            chosen_key = "xgboost"
-        else:
-            first_key = next(iter(self.models.keys()))
-            target_model = self.models[first_key]
-            chosen_key = first_key
+        chosen_key = model_key or self.metadata.get("model_key")
+        if chosen_key not in self.models:
+            raise ValueError(f"Requested model is unavailable: {chosen_key!r}.")
+        target_model = self.models[chosen_key]
+        payload, errors = validate_payload(payload)
+        if errors:
+            raise ValueError("Invalid applicant input: " + "; ".join(
+                f"{e['field']}: {e['message']}" for e in errors))
 
         X = self.to_model_frame(payload)
-        prob = float(target_model.predict_proba(X)[:, 1][0])
+        prob = self._probability(target_model, X)
         score = probability_to_score(prob)
-        band = probability_to_band(prob, self.cfg)
+        scoring_cfg = getattr(self, "scoring_cfg", self.cfg)
+        band = probability_to_band(prob, scoring_cfg)
 
-        thr = float(self.cfg.get("risk_score", {}).get("threshold", 0.166))
+        thr, threshold_basis = self._threshold(chosen_key)
         decision = probability_to_decision(prob, threshold=thr)
 
         explanation = None
@@ -168,19 +205,36 @@ class ModelService:
 
         # Multi-model consensus comparison
         all_preds = {}
+        comparison_errors = []
         for m_key, m_estimator in self.models.items():
             try:
-                p = float(m_estimator.predict_proba(X)[:, 1][0])
+                p = prob if m_key == chosen_key else self._probability(m_estimator, X)
+                model_threshold, model_threshold_basis = self._threshold(m_key)
                 all_preds[m_key] = {
                     "model_key": m_key,
                     "display_name": MODEL_DISPLAY_NAMES.get(m_key, m_key.title()),
                     "default_probability": p,
                     "risk_score": probability_to_score(p),
-                    "risk_band": probability_to_band(p, self.cfg),
-                    "decision": probability_to_decision(p, threshold=thr),
+                    "risk_band": probability_to_band(p, scoring_cfg),
+                    "decision": probability_to_decision(p, threshold=model_threshold),
+                    "threshold_basis": model_threshold_basis,
                 }
             except Exception:
-                pass
+                logger.exception("Comparison prediction failed for %s", m_key)
+                comparison_errors.append(m_key)
+
+        missing = sorted(name for name in OPTIONAL_FIELDS if payload.get(name) is None)
+        limitations = self._limitations()
+        if missing:
+            limitations.append("Missing inputs imputed by the model: " + ", ".join(missing))
+        outside = [name for name, bounds in self.metadata.get("input_profile", {}).items()
+                   if payload.get(name) is not None
+                   and not bounds["min"] <= payload[name] <= bounds["max"]]
+        if outside:
+            limitations.append("Inputs outside the observed training range; estimate may extrapolate: "
+                               + ", ".join(sorted(outside)))
+        if threshold_basis == "configured_unvalidated":
+            limitations.append("The configured threshold has not been validated for this artifact.")
 
         result = {
             "model_key": chosen_key,
@@ -194,12 +248,21 @@ class ModelService:
             "decision_color": decision["badge_color"],
             "decision_action": decision["action"],
             "decision_threshold": decision["threshold"],
+            "threshold_basis": threshold_basis,
             "model_version": self.metadata.get("model_version", "0.1.0"),
+            "trained_at": self.metadata.get("trained_at"),
+            "assessed_at": datetime.now(timezone.utc).isoformat(),
+            "dataset_source": self.metadata.get("dataset_source", "unknown"),
+            "synthetic": self.metadata.get("synthetic"),
+            "synthetic_warning": self.metadata.get("synthetic_warning"),
             "explanation_available": explanation_available,
             "explanation": explanation,
             "all_model_predictions": all_preds,
-            "limitations": self._limitations(),
-            "disclaimer": score_definition(self.cfg)["disclaimer"],
+            "comparison_unavailable": comparison_errors,
+            "missing_inputs": missing,
+            "outside_training_range": sorted(outside),
+            "limitations": limitations,
+            "disclaimer": score_definition(scoring_cfg)["disclaimer"],
         }
         pid = self.persist_prediction(payload, result)
         if pid:
@@ -211,6 +274,9 @@ class ModelService:
         if self.metadata.get("synthetic"):
             lims.insert(0, "MODEL TRAINED ON SYNTHETIC DATA — outputs are for "
                            "demonstration only and are NOT real risk estimates.")
+        if not self.metadata.get("file_hashes"):
+            lims.append("Legacy artifact: training-run integrity has not been verified. Retrain before relying on results.")
+        lims.append("External scores must use the original dataset definitions; estimates are not validated for a different population or currency scale.")
         return lims
 
     # -- persistence seam (stateless now) -------------------------------
@@ -222,15 +288,15 @@ class ModelService:
 
     # -- read-only reports (for the dashboard; never fabricated) --------
     def get_metrics(self) -> Optional[dict[str, Any]]:
-        try:
-            return artifacts.load_json(artifacts.METRICS_FILE, self.cfg)
-        except FileNotFoundError:
-            return None
+        # Snapshot loaded with the model; a later training run cannot swap its report.
+        return getattr(self, "_metrics", None)
 
     def get_feature_schema(self) -> dict[str, Any]:
         return self.feature_schema
 
     def get_manifest(self) -> Optional[dict[str, Any]]:
+        if "dataset_manifest.json" in self.metadata.get("file_hashes", {}):
+            return self._manifest
         path = self.cfg.path("manifest")
         if not path.exists():
             return None
@@ -239,6 +305,8 @@ class ModelService:
             return json.load(fh)
 
     def get_validation_report(self) -> Optional[dict[str, Any]]:
+        if "validation_report.json" in self.metadata.get("file_hashes", {}):
+            return self._validation_report
         path = self.cfg.path("reports") / "validation_report.json"
         if not path.exists():
             return None

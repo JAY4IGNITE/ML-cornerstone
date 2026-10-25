@@ -70,6 +70,9 @@ def validate_raw(df: pd.DataFrame, cfg: Config, source_file: str = "") -> Valida
     target = cfg.target
     sentinel = int(cfg["preprocessing"]["days_employed_anomaly"])
 
+    rep.add("nonempty_dataset", "fail" if df.empty else "pass",
+            "Dataset must contain training records." if df.empty else f"{len(df)} records present.")
+
     # 1. required columns present
     required = [RAW_ID] + RAW_FEATURE_COLUMNS
     missing = [c for c in required if c not in df.columns]
@@ -83,8 +86,12 @@ def validate_raw(df: pd.DataFrame, cfg: Config, source_file: str = "") -> Valida
     if target not in df.columns:
         rep.add("target_present", "fail", f"Target column '{target}' missing.")
     else:
-        vc = df[target].value_counts(dropna=False).to_dict()
-        vc = {str(k): int(v) for k, v in vc.items()}
+        values = df[target]
+        vc = values.value_counts(dropna=False).to_dict()
+        # Compare values, not their string representations: 0.0 and 1.0 are
+        # valid binary labels, whereas 0.5 must never be truncated to zero.
+        vc = {str(int(k)) if pd.notna(k) and k in (0, 1) else str(k): int(v)
+              for k, v in vc.items()}
         n_missing_t = int(df[target].isna().sum())
         pos = int((df[target] == 1).sum())
         rate = pos / len(df) if len(df) else 0.0
@@ -93,10 +100,13 @@ def validate_raw(df: pd.DataFrame, cfg: Config, source_file: str = "") -> Valida
         if n_missing_t > 0:
             status = "fail"
             detail = f"Target has {n_missing_t} missing values. " + detail
-        extra = set(vc) - {"0", "1"}
-        if extra:
+        invalid = values.notna() & ~values.isin([0, 1])
+        if invalid.any():
             status = "fail"
-            detail = f"Target has unexpected values {extra}. " + detail
+            detail = f"Target has {int(invalid.sum())} nonbinary values. " + detail
+        if set(values.dropna().unique()) != {0, 1}:
+            status = "fail"
+            detail = "Target must contain both binary classes 0 and 1. " + detail
         rep.add("target_distribution", status, detail,
                 counts=vc, positive_rate=rate, missing=n_missing_t)
 
@@ -141,9 +151,17 @@ def validate_raw(df: pd.DataFrame, cfg: Config, source_file: str = "") -> Valida
 
     # 7. duplicate identifiers
     if RAW_ID in df.columns:
+        missing_ids = df[RAW_ID].isna() | df[RAW_ID].astype(str).str.strip().eq("")
+        rep.add("missing_ids", "fail" if missing_ids.any() else "pass",
+                f"{int(missing_ids.sum())} missing or blank {RAW_ID} values.",
+                count=int(missing_ids.sum()))
         dup_ids = int(df[RAW_ID].duplicated().sum())
-        rep.add("duplicate_ids", "fail" if dup_ids else "pass",
-                f"{dup_ids} duplicate {RAW_ID} values.", count=dup_ids)
+        conflicts = int(df.drop_duplicates()[RAW_ID].duplicated().sum())
+        status = "fail" if conflicts else ("warn" if dup_ids else "pass")
+        rep.add("duplicate_ids", status,
+                f"{dup_ids} duplicate {RAW_ID} values; {conflicts} conflicting records. "
+                "Only identical rows may be removed before splitting.",
+                count=dup_ids, conflicting_records=conflicts)
 
     # 8. invalid numerical ranges (negative amounts etc.)
     range_issues: dict[str, int] = {}

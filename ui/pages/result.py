@@ -1,9 +1,9 @@
 """Prediction Result page — the most recent assessment.
 
 Presents the comprehensive evaluation for the applicant:
-  * Lending Recommendation (Approved / Review / Declined).
-  * Machine Learning Classification Target (Class 0: Repaid vs Class 1: Default).
-  * Calibrated Risk Score (0-100) and probability vs optimal decision threshold.
+  * Analyst review flag, without automated loan decisions.
+  * Machine Learning Classification Target (Below vs at/above the model threshold).
+  * Calibrated Risk Score (0-100) and probability vs recorded decision threshold.
   * Direct summary of key positive and negative SHAP risk drivers.
   * Cross-model consensus comparison across all candidate ML models.
 """
@@ -20,11 +20,12 @@ from ui.helpers import (
     get_service,
     page_header,
     pct,
+    require_model,
     risk_band_badge,
     stat_cards,
     synthetic_warning,
 )
-from ui.pages.assessment import PRESETS
+from ui.pages.assessment import PRESETS, reset_assessment
 from ui.state import get_prediction, save_prediction
 
 
@@ -34,11 +35,12 @@ def render() -> None:
     pred = get_prediction()
 
     page_header(
-        "Prediction Result & Decision Report",
+        "Prediction Result & Review Report",
         "Detailed analytical breakdown, ML model classification, and risk factor attribution.",
     )
 
     if pred is None:
+        require_model(service)
         st.info("ℹ️ **No assessment in this session yet.** Click a profile below to evaluate instantly:")
         cols = st.columns(3)
         for col, (pkey, pval) in zip(cols, PRESETS.items()):
@@ -55,7 +57,7 @@ def render() -> None:
     score = int(result["risk_score"])
     band = str(result["risk_band"])
     target = int(result.get("predicted_target", 0))
-    target_lbl = str(result.get("target_label", "Repayment Expected" if target == 0 else "Payment Difficulty"))
+    target_lbl = str(result.get("target_label", "Below model threshold" if target == 0 else "At or above model threshold"))
     dec = str(result.get("decision", "Assessment Complete"))
     dec_color = str(result.get("decision_color", "#059669"))
     dec_action = str(result.get("decision_action", ""))
@@ -63,8 +65,8 @@ def render() -> None:
     m_name = str(result.get("model_name", "Primary Model"))
 
     synthetic_warning(
-        mi.get("synthetic", False),
-        mi.get("synthetic_warning"),
+        result.get("synthetic", mi.get("synthetic", False)),
+        result.get("synthetic_warning", mi.get("synthetic_warning")),
         title="Synthetic data",
         fallback="This model was trained on synthetic data. Results are for demonstration only.",
     )
@@ -76,7 +78,7 @@ def render() -> None:
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
                 <div>
                     <span style="font-size:0.85rem;font-weight:700;text-transform:uppercase;color:{dec_color};letter-spacing:0.06em;">
-                        Model Lending Decision · {m_name.split('(')[0].strip()}
+                        Analyst Review Indicator · {m_name.split('(')[0].strip()}
                     </span>
                     <h1 style="margin:4px 0 8px;color:{dec_color};font-size:2.1rem;font-weight:850;">
                         {dec}
@@ -99,20 +101,23 @@ def render() -> None:
     # 2. Key Metrics Row
     stat_cards([
         ("Default Probability", pct(prob, 2), f"Decision Boundary: {pct(thr, 1)}"),
-        ("Calibrated Risk Score", f"{score} / 100", "Calibrated Credit Risk Index"),
+        ("Risk Score", f"{score} / 100", "Rounded probability × 100"),
         ("Risk Band", band, "Probability Interval"),
         ("Evaluated By", m_name.split("(")[0].strip(), f"Model Version {result.get('model_version', '0.1.0')}"),
     ])
 
     st.markdown("<br>", unsafe_allow_html=True)
+    st.caption(f"Assessed: {result.get('assessed_at', 'not recorded')} · "
+               f"Training source: {result.get('dataset_source', 'not recorded')} · "
+               f"Threshold basis: {result.get('threshold_basis', 'not recorded')}")
 
     # 3. Probability vs Decision Threshold Comparison
     st.subheader("Default Probability vs Decision Threshold")
     st.caption(
-        f"Calibrated default probability is **{pct(prob, 2)}**. The optimal decision boundary "
-        f"derived from cross-validation is **{pct(thr, 2)}**. "
-        f"Applicants below threshold are classified as TARGET=0 (Approved/Low Risk), "
-        f"while those above are classified as TARGET=1 (Default Risk)."
+        f"Estimated probability is **{pct(prob, 2)}**. This assessment used a "
+        f"classification threshold of **{pct(thr, 2)}**. Predictions below this "
+        "threshold are class 0; predictions at or above it are class 1. "
+        "These model classes are not verified outcomes or loan decisions."
     )
 
     gauge_df = pd.DataFrame([
@@ -120,7 +125,7 @@ def render() -> None:
         {"Metric": "Decision Threshold", "Value": thr, "Type": "Threshold"},
     ])
     gauge_chart = alt.Chart(gauge_df).mark_bar(cornerRadius=4, height=28).encode(
-        x=alt.X("Value:Q", title="Probability Scale (0.0 to 1.0)", scale=alt.Scale(domain=[0, max(0.5, prob + 0.1)]), axis=alt.Axis(format="%")),
+        x=alt.X("Value:Q", title="Probability Scale (0.0 to 1.0)", scale=alt.Scale(domain=[0, 1]), axis=alt.Axis(format="%")),
         y=alt.Y("Metric:N", title=None, sort=["Applicant Probability", "Decision Threshold"]),
         color=alt.Color("Type:N", scale=alt.Scale(domain=["Applicant", "Threshold"], range=[dec_color, "#475569"]), legend=None),
         tooltip=[alt.Tooltip("Metric:N"), alt.Tooltip("Value:Q", format=".2%")],
@@ -133,8 +138,9 @@ def render() -> None:
     expl = result.get("explanation") or {}
     contribs = expl.get("contributions") or []
     if contribs:
-        st.subheader("Key Risk Attribution Factors (SHAP)")
-        st.caption("Top factors influencing this specific applicant's prediction:")
+        st.subheader("Model Explanation")
+        st.caption(f"Method: {expl.get('method', 'unavailable')} · Output space: {expl.get('output_space', 'unspecified')}")
+        st.caption(expl.get("interpretation", expl.get("note", "")))
 
         pos_drivers = expl.get("positive_drivers") or [c for c in contribs if c["direction"] == "increases_risk"]
         neg_drivers = expl.get("negative_drivers") or [c for c in contribs if c["direction"] == "decreases_risk"]
@@ -155,7 +161,7 @@ def render() -> None:
                         unsafe_allow_html=True,
                     )
             else:
-                st.caption("No significant risk-reducing factors identified.")
+                st.caption("No decreasing contributions available in this explanation.")
 
         with c_pos:
             st.markdown("##### 🔴 Top Risk-Elevating Factors")
@@ -172,10 +178,10 @@ def render() -> None:
                         unsafe_allow_html=True,
                     )
             else:
-                st.caption("No significant risk-elevating factors identified.")
+                st.caption("No increasing contributions available in this explanation.")
 
         st.caption(
-            "👉 Open the **Explainability** page in the sidebar for the full SHAP Waterfall chart and complete breakdown."
+            "Open **Explainability** for the available attribution details and their limitations."
         )
 
     st.divider()
@@ -185,7 +191,7 @@ def render() -> None:
     if all_preds:
         st.subheader("Cross-Model Multi-Model Comparison")
         st.caption(
-            "Evaluation of this exact applicant across all 4 candidate models trained in the pipeline:"
+            f"Predictions from {len(all_preds)} available model(s). Agreement is not independent validation of an applicant's outcome."
         )
 
         rows = []
@@ -197,7 +203,7 @@ def render() -> None:
                 "Risk Score": f"{mres.get('risk_score', 0)} / 100",
                 "Risk Band": mres.get("risk_band", "—"),
                 "Predicted Class": f"TARGET = {m_dec.get('predicted_target', 0)}",
-                "Lending Recommendation": m_dec.get("recommendation", "—"),
+                "Review Indicator": m_dec.get("recommendation", "—"),
             })
 
         st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
@@ -207,14 +213,17 @@ def render() -> None:
     c_btn1, c_btn2 = st.columns(2)
     with c_btn1:
         if st.button("📝 Assess Another Applicant", use_container_width=True):
-            st.session_state["form_preset"] = None
-            st.session_state["form_data"] = {}
-            st.rerun()
+            reset_assessment()
+            from ui.pages.assessment import render as render_assessment
+            st.switch_page(st.Page(render_assessment, title="Risk Assessment", url_path="assessment"))
     with c_btn2:
         st.markdown(
             "<div style='text-align:right;padding-top:8px;'>"
-            "<a href='explainability' target='_self' style='font-size:1.05rem;font-weight:700;text-decoration:none;'>🔍 View Detailed SHAP Explainability &rarr;</a>"
+            "<a href='explainability' target='_self' style='font-size:1.05rem;font-weight:700;text-decoration:none;'>View Explanation Details &rarr;</a>"
             "</div>",
             unsafe_allow_html=True,
         )
+    st.info(result.get("disclaimer", "Model estimates require human review."))
+    for limitation in result.get("limitations", []):
+        st.caption(limitation)
 

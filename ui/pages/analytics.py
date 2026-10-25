@@ -1,7 +1,6 @@
 """Analytics Dashboard page — portfolio composition and risk drivers.
 
-Reads the training dataset directly (real ``application_train.csv`` when present,
-else the synthetic fixture) and derives descriptive analytics. Two rules keep it
+Reads the configured dataset directly and derives descriptive analytics. Two rules keep it
 honest and fast:
 
   * **Config-anchored paths.** The file location comes from ``ModelService.cfg``,
@@ -16,6 +15,7 @@ publish a currency); they are never labelled as dollars.
 from __future__ import annotations
 
 from typing import Optional
+from pathlib import Path
 
 import altair as alt
 import pandas as pd
@@ -27,18 +27,18 @@ from ui.helpers import get_service, page_header, pct, stat_cards
 
 
 @st.cache_data(show_spinner="Loading dataset…")
-def _load(path: str) -> pd.DataFrame:
+def _load(path: str, modified_ns: int, size: int) -> pd.DataFrame:
     return pd.read_csv(path)
 
 
 def _resolve() -> tuple[Optional[str], bool]:
-    """(path, is_synthetic) from config; real file preferred, else synthetic."""
+    """Use exactly the configured source; never silently substitute datasets."""
     cfg = get_service().cfg
     raw = cfg.path("data_raw") / cfg["dataset"]["primary_file"]
     syn = cfg.path("data_synthetic") / cfg["dataset"]["synthetic_file"]
-    if raw.exists():
+    if cfg["dataset"]["source"] == "real" and raw.exists():
         return str(raw), False
-    if syn.exists():
+    if cfg["dataset"]["source"] == "synthetic" and syn.exists():
         return str(syn), True
     return None, False
 
@@ -55,7 +55,7 @@ def _age_years(df: pd.DataFrame) -> Optional[pd.Series]:
 def render() -> None:
     page_header(
         "Analytics Dashboard",
-        "Portfolio composition and the factors that move default risk across the "
+        "Dataset composition and associations with observed payment difficulty across the "
         "applicant pool.",
     )
 
@@ -68,11 +68,12 @@ def render() -> None:
         )
         return
 
-    df = _load(path)
+    stat = Path(path).stat()
+    df = _load(path, stat.st_mtime_ns, stat.st_size)
     st.caption(
         (":orange-badge[⚠ Synthetic data]" if is_synthetic
          else ":green-badge[● Real dataset]")
-        + "  ·  Home Credit Portfolio Dataset (307,511 loans benchmarked)."
+        + f"  ·  Configured dataset: {len(df):,} applicant records."
     )
     if is_synthetic:
         st.warning("**Synthetic data** — distributions approximate real credit "
@@ -154,14 +155,14 @@ def _rate_by_category(df: pd.DataFrame, col: str, title: str,
 def _portfolio(df: pd.DataFrame) -> None:
     if "TARGET" in df.columns:
         st.markdown("**Repayment outcome**")
-        vc = (df["TARGET"].map({0: "Repaid", 1: "Defaulted"})
+        vc = (df["TARGET"].map({0: "No recorded payment difficulty", 1: "Recorded payment difficulty"})
               .value_counts().reset_index())
         vc.columns = ["Outcome", "Count"]
         chart = alt.Chart(vc).mark_bar().encode(
             x=alt.X("Count:Q", title="Applicants", axis=alt.Axis(format="~s")),
             y=alt.Y("Outcome:N", sort="-x", title=None),
             color=alt.Color("Outcome:N", legend=None,
-                            scale=alt.Scale(domain=["Repaid", "Defaulted"],
+                            scale=alt.Scale(domain=["No recorded payment difficulty", "Recorded payment difficulty"],
                                             range=[charts.NEG, charts.POS])),
             tooltip=[alt.Tooltip("Outcome:N"), alt.Tooltip("Count:Q", format=",")],
         )
@@ -228,7 +229,7 @@ def _rate_by_age(df: pd.DataFrame) -> None:
     rule = alt.Chart(pd.DataFrame({"r": [overall]})).mark_rule(
         color=charts.AMBER, strokeDash=[4, 4]).encode(y="r:Q")
     charts.show(bars + rule, height=240)
-    st.caption("Younger applicants default more often — risk falls steadily with age.")
+    st.caption("Observed rates describe this dataset; differences by age are not causal evidence or an individual forecast.")
 
 
 def _rate_by_ext_source(df: pd.DataFrame) -> None:
@@ -236,14 +237,13 @@ def _rate_by_ext_source(df: pd.DataFrame) -> None:
                 if c in df.columns), None)
     if col is None or "TARGET" not in df.columns:
         return
-    st.markdown(f"**Default rate by External Credit Bureau Rating ({col}) Decile**")
+    st.markdown(f"**Payment-difficulty rate by normalized external score ({col}) quantile**")
     s = df[[col, "TARGET"]].dropna(subset=[col])
     if len(s) < 100:
         st.caption("Not enough non-missing scores to bin.")
         return
     try:
-        s = s.assign(decile=pd.qcut(s[col], 10, labels=list(range(1, 11)),
-                                    duplicates="drop"))
+        s = s.assign(decile=pd.qcut(s[col], 10, labels=False, duplicates="drop") + 1)
     except ValueError:
         st.caption("Score has too few distinct values to decile.")
         return
@@ -258,9 +258,8 @@ def _rate_by_ext_source(df: pd.DataFrame) -> None:
     )
     charts.show(line, height=240)
     st.caption(
-        "Default rate falls sharply as the external credit score rises — a "
-        "near-monotonic signal. This is why the `EXT_SOURCE_*` fields dominate "
-        "the model's importance rankings (see Explainability)."
+        "Quantiles summarize observed outcomes among records with available scores. "
+        "Missing values are excluded. The score providers and exact definitions are undisclosed."
     )
 
 

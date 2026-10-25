@@ -19,6 +19,7 @@ from ui.helpers import (
     num,
     page_header,
     pct,
+    require_model,
     risk_band_badge,
     synthetic_warning,
     TRAIN_HINT,
@@ -57,12 +58,12 @@ def _global_importance(service: Any) -> None:
     )
 
     st.markdown(
-        "Two complementary views: **tree importance** is how often the model "
-        "splits on a feature (cheap, but biased toward high-cardinality fields); "
+        "Two complementary views: **native importance** uses model coefficients "
+        "or split-impurity reductions (tree importance can favor high-cardinality fields); "
         "**permutation importance** is the actual ROC-AUC lost when the feature "
         "is shuffled (slower, but a direct measure of predictive value)."
     )
-    tab_tree, tab_perm = st.tabs(["Tree importance", "Permutation importance"])
+    tab_tree, tab_perm = st.tabs(["Native importance", "Permutation importance"])
     with tab_tree:
         _importance_block(metrics.get("global_importance", {}), kind="tree")
     with tab_perm:
@@ -97,6 +98,9 @@ def _importance_block(block: dict[str, Any], *, kind: str) -> None:
         st.markdown(block["interpretation"])
 
     feats = block.get("features") or []
+    if not feats:
+        st.info("No importance values are available.")
+        return
     df = pd.DataFrame([{"Feature": f.get("feature"),
                         "Importance": f.get("importance"),
                         "std": f.get("std")} for f in feats])
@@ -105,7 +109,7 @@ def _importance_block(block: dict[str, Any], *, kind: str) -> None:
         st.info("No importance values are available.")
         return
     order = df["Feature"].tolist()
-    xtitle = "Mean ROC-AUC drop" if kind == "permutation" else "Tree split importance"
+    xtitle = "Mean ROC-AUC drop" if kind == "permutation" else "Native feature importance"
     bars = alt.Chart(df).mark_bar(color=charts.ACCENT).encode(
         x=alt.X("Importance:Q", title=xtitle),
         y=alt.Y("Feature:N", sort=order, title=None),
@@ -137,11 +141,12 @@ from ui.state import get_prediction, save_prediction
 
 def _applicant_explanation() -> None:
     service = get_service()
-    st.subheader("Applicant-level SHAP explainability")
+    st.subheader("Applicant-level explanation")
 
     pred = get_prediction()
     if pred is None:
-        st.info("ℹ️ **No applicant assessed yet.** Select a test profile below to generate an instantaneous SHAP attribution:")
+        require_model(service)
+        st.info("No applicant assessed yet. Select an illustrative profile to inspect the available explanation:")
         cols = st.columns(3)
         for col, (pkey, pval) in zip(cols, PRESETS.items()):
             with col:
@@ -176,20 +181,31 @@ def _applicant_explanation() -> None:
 
     if not result.get("explanation_available") or not contribs:
         st.info(
-            "**No per-applicant SHAP explanation** — Local attribution is not available for this model. "
+            "**No per-applicant explanation** — Local attribution is not available for this model. "
             "See global feature importance above."
         )
         return
 
-    st.markdown(f"**Explanation Backend**: `{expl.get('method', 'shap_tree')}` — Game-theoretic exact feature attribution.")
+    st.markdown(f"**Explanation method**: `{expl.get('method', 'unavailable')}`")
+    st.caption(expl.get("interpretation", expl.get("note", "")))
+    if expl.get("scope"):
+        st.caption(f"Scope: {expl['scope']} · Output space: {expl.get('output_space', 'unspecified')}")
+    if not any(c.get("direction") in {"increases_risk", "decreases_risk"} for c in contribs):
+        st.info("Only unsigned global importance is available. It does not explain this applicant or establish a direction of effect.")
+        st.dataframe(pd.DataFrame([
+            {"Feature": c.get("display_label", c.get("feature")),
+             "Global importance": c.get("contribution")} for c in contribs
+        ]), hide_index=True, use_container_width=True)
+        return
     if expl.get("summary_text"):
         st.info(f"💡 **Key Driver Summary**: {expl['summary_text']}")
 
     # --- Interactive SHAP Contribution Bar Chart ---
-    st.markdown("##### 📊 SHAP Feature Attribution Chart (Diverging Impact)")
+    st.markdown("##### Feature Attribution")
     st.caption(
-        "Features in **Red** pushed the predicted default risk **UP** (higher risk of default). "
-        "Features in **Green** pushed the default risk **DOWN** (supporting creditworthiness)."
+        "Signed contributions describe the explained estimator's output relative to its baseline. "
+        "They are associations, not causes, evidence of repayment history, or lending advice. "
+        "A base-estimator explanation need not sum to the calibrated ensemble probability."
     )
 
     plot_data = []
@@ -209,7 +225,7 @@ def _applicant_explanation() -> None:
     # Diverging horizontal bar chart
     shap_chart = alt.Chart(df_shap).mark_bar(cornerRadius=3).encode(
         y=alt.Y("Feature:N", sort=df_shap["Feature"].tolist(), title=None),
-        x=alt.X("Contribution:Q", title="SHAP Impact (Log-Odds / Probability Contribution)"),
+        x=alt.X("Contribution:Q", title=f"Contribution ({expl.get('output_space', 'model output')})"),
         color=alt.Color(
             "Impact Type:N",
             scale=alt.Scale(
@@ -220,7 +236,7 @@ def _applicant_explanation() -> None:
         ),
         tooltip=[
             alt.Tooltip("Feature:N", title="Factor"),
-            alt.Tooltip("Contribution:Q", format="+.4f", title="SHAP Value"),
+            alt.Tooltip("Contribution:Q", format="+.4f", title="Contribution"),
             alt.Tooltip("Impact Type:N", title="Direction"),
             alt.Tooltip("Reason:N", title="Rationale"),
         ],
@@ -231,13 +247,13 @@ def _applicant_explanation() -> None:
     st.markdown("##### 📋 Detailed Factor-by-Factor Analysis")
     table_rows = [{
         "Factor": c.get("display_label", c.get("feature")),
-        "SHAP Impact": f"{float(c.get('contribution', 0.0)):+.4f}",
-        "Direction": "🔴 Increases Risk" if c.get("direction") == "increases_risk" else "🟢 Decreases Risk",
-        "Underwriting Rationale": c.get("reason", ""),
+        "Contribution": f"{float(c.get('contribution', 0.0)):+.4f}",
+        "Direction": {"increases_risk": "Increases model output", "decreases_risk": "Decreases model output"}.get(c.get("direction"), "No signed effect"),
+        "Interpretation": c.get("reason", ""),
     } for c in contribs]
     st.dataframe(pd.DataFrame(table_rows), hide_index=True, use_container_width=True)
 
     st.caption(
-        "SHAP (SHapley Additive exPlanations) computes the exact Shapley values from cooperative game theory, "
-        "allocating credit and blame fairly among all input features for this individual assessment."
+        "Only the largest available contributions are shown. Attribution does not establish "
+        "fairness, causality, or the accuracy of an individual prediction."
     )

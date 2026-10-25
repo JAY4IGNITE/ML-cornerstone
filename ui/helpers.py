@@ -17,9 +17,11 @@ Design notes:
 from __future__ import annotations
 
 from typing import Any, Iterable, Optional
+import math
 
 import streamlit as st
 
+from loan_risk.config import Config, load_config
 from loan_risk.serving import ModelService
 
 TRAIN_HINT = (
@@ -28,17 +30,33 @@ TRAIN_HINT = (
 )
 
 
-@st.cache_resource(show_spinner="Loading model…")
+@st.cache_resource(show_spinner="Loading model…", max_entries=2)
+def _cached_service(signature: tuple, _cfg: Config) -> ModelService:
+    return ModelService(_cfg)
+
+
 def get_service() -> ModelService:
-    """One ModelService per process (model + metadata + schema loaded once)."""
-    return ModelService()
+    """Reload when artifacts appear or are replaced, including after training."""
+    cfg = load_config()
+    directory = cfg.path("artifacts")
+    paths = sorted(p for p in directory.rglob("*") if p.is_file()) if directory.exists() else []
+    signature = (str(directory), repr(cfg.raw), tuple(
+        (str(path.relative_to(directory)), path.stat().st_mtime_ns, path.stat().st_size)
+        for path in paths
+    ))
+    return _cached_service(signature, cfg)
+
+
+get_service.clear = _cached_service.clear
 
 
 # ---- formatting (parity with format.ts) ------------------------------------
 def pct(x: Optional[float], digits: int = 1) -> str:
-    if x is None:
+    try:
+        value = float(x)
+    except (TypeError, ValueError):
         return "—"
-    return f"{x * 100:.{digits}f}%"
+    return f"{value * 100:.{digits}f}%" if math.isfinite(value) else "—"
 
 
 def num(x: Optional[float], digits: int = 3) -> str:
@@ -58,7 +76,7 @@ def metric_value(x: Any) -> str:
     if isinstance(x, dict):
         return "n/a"
     try:
-        return f"{float(x):.4f}"
+        return num(x, 4)
     except (TypeError, ValueError):
         return "—"
 

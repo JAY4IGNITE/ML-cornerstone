@@ -1,34 +1,418 @@
 {
   "model_name": "XGBoost",
   "model_key": "xgboost",
-  "model_version": "0.1.0",
-  "trained_at": "2026-10-25T17:40:00Z",
+  "model_version": "20261025T184404Z-52e96b89",
+  "api_version": "0.1.0",
+  "candidate_details": {
+    "logistic_regression": {
+      "display_name": "Logistic Regression",
+      "decision_threshold": 0.14694782070215348,
+      "threshold_basis": "held_out_validation_f1",
+      "calibration_method": "sigmoid",
+      "validation_metrics": {
+        "threshold": 0.5,
+        "accuracy": 0.9191699524409577,
+        "precision": 0.45901639344262296,
+        "recall": 0.007049345417925478,
+        "f1": 0.01388544507810563,
+        "roc_auc": 0.7418998654966815,
+        "pr_auc": 0.21847610209031515,
+        "brier_score": 0.06894001502956235,
+        "confusion_matrix": {
+          "tn": 45197,
+          "fp": 33,
+          "fn": 3944,
+          "tp": 28
+        },
+        "n": 49202,
+        "positive_rate": 0.0807284256737531,
+        "metric_notes": {}
+      }
+    },
+    "decision_tree": {
+      "display_name": "Decision Tree",
+      "decision_threshold": 0.12703186318389112,
+      "threshold_basis": "held_out_validation_f1",
+      "calibration_method": "sigmoid",
+      "validation_metrics": {
+        "threshold": 0.5,
+        "accuracy": 0.919271574326247,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "roc_auc": 0.7320572745677848,
+        "pr_auc": 0.20292895223385155,
+        "brier_score": 0.06963766490726997,
+        "confusion_matrix": {
+          "tn": 45230,
+          "fp": 0,
+          "fn": 3972,
+          "tp": 0
+        },
+        "n": 49202,
+        "positive_rate": 0.0807284256737531,
+        "metric_notes": {}
+      }
+    },
+    "random_forest": {
+      "display_name": "Random Forest",
+      "decision_threshold": 0.14970585327745758,
+      "threshold_basis": "held_out_validation_f1",
+      "calibration_method": "sigmoid",
+      "validation_metrics": {
+        "threshold": 0.5,
+        "accuracy": 0.919271574326247,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "roc_auc": 0.7478540141369868,
+        "pr_auc": 0.22490863090589258,
+        "brier_score": 0.06877747734199283,
+        "confusion_matrix": {
+          "tn": 45230,
+          "fp": 0,
+          "fn": 3972,
+          "tp": 0
+        },
+        "n": 49202,
+        "positive_rate": 0.0807284256737531,
+        "metric_notes": {}
+      }
+    },
+    "xgboost": {
+      "display_name": "XGBoost",
+      "decision_threshold": 0.16892268018171427,
+      "threshold_basis": "held_out_validation_f1",
+      "calibration_method": "sigmoid",
+      "validation_metrics": {
+        "threshold": 0.5,
+        "accuracy": 0.919271574326247,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "roc_auc": 0.7559511762527833,
+        "pr_auc": 0.23821707512200774,
+        "brier_score": 0.06829293940644049,
+        "confusion_matrix": {
+          "tn": 45230,
+          "fp": 0,
+          "fn": 3972,
+          "tp": 0
+        },
+        "n": 49202,
+        "positive_rate": 0.0807284256737531,
+        "metric_notes": {}
+      }
+    }
+  },
+  "decision_threshold": 0.16892268018171427,
+  "dataset_sha256": "52e96b895b1112e1c853f670e58372719c8441c5ed1c57ac2f7fad559d784f5f",
+  "training_config": {
+    "project": {
+      "name": "Intelligent Loan Risk Assessment System",
+      "task": "default_risk",
+      "random_seed": 42
+    },
+    "paths": {
+      "data_raw": "data/raw",
+      "data_synthetic": "data/synthetic",
+      "data_processed": "data/processed",
+      "artifacts": "reports/retrained/artifacts",
+      "reports": "reports/retrained/diagnostics",
+      "manifest": "reports/retrained/manifest.json"
+    },
+    "dataset": {
+      "source": "real",
+      "primary_file": "application_train.csv",
+      "synthetic_file": "application_train_synthetic.csv",
+      "target": "TARGET",
+      "id_column": "SK_ID_CURR"
+    },
+    "synthetic": {
+      "n_rows": 20000,
+      "positive_rate": 0.081,
+      "missing_rate_ext_source": 0.35,
+      "missing_rate_occupation": 0.31
+    },
+    "split": {
+      "test_size": 0.2,
+      "val_size": 0.2,
+      "stratify": true
+    },
+    "preprocessing": {
+      "numeric_imputation": "median",
+      "categorical_unknown_token": "__UNKNOWN__",
+      "scale_for_linear": true,
+      "days_employed_anomaly": 365243
+    },
+    "models": {
+      "logistic_regression": {
+        "enabled": true,
+        "C": 1.0,
+        "max_iter": 1000,
+        "class_weight": "balanced"
+      },
+      "decision_tree": {
+        "enabled": true,
+        "max_depth": 6,
+        "min_samples_leaf": 50,
+        "class_weight": "balanced"
+      },
+      "random_forest": {
+        "enabled": true,
+        "n_estimators": 300,
+        "max_depth": 12,
+        "min_samples_leaf": 20,
+        "n_jobs": -1,
+        "class_weight": "balanced"
+      },
+      "xgboost": {
+        "enabled": true,
+        "n_estimators": 400,
+        "max_depth": 5,
+        "learning_rate": 0.05,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8
+      }
+    },
+    "calibration": {
+      "method": "sigmoid",
+      "cv": 3
+    },
+    "evaluation": {
+      "selection_metric": "roc_auc"
+    },
+    "selection": {
+      "cv_folds": 3
+    },
+    "tuning": {
+      "enabled": true,
+      "models": [
+        "random_forest",
+        "xgboost"
+      ],
+      "n_iter": 4,
+      "cv_folds": 3,
+      "max_search_samples": 30000,
+      "param_distributions": {
+        "random_forest": {
+          "model__n_estimators": [
+            200,
+            300,
+            400
+          ],
+          "model__max_depth": [
+            8,
+            12,
+            16,
+            20
+          ],
+          "model__min_samples_leaf": [
+            10,
+            20,
+            50
+          ]
+        },
+        "xgboost": {
+          "model__n_estimators": [
+            300,
+            400,
+            600
+          ],
+          "model__max_depth": [
+            4,
+            5,
+            6,
+            8
+          ],
+          "model__learning_rate": [
+            0.03,
+            0.05,
+            0.1
+          ],
+          "model__subsample": [
+            0.7,
+            0.8,
+            1.0
+          ],
+          "model__colsample_bytree": [
+            0.7,
+            0.8,
+            1.0
+          ]
+        }
+      }
+    },
+    "risk_score": {
+      "threshold": 0.166,
+      "bands": [
+        {
+          "name": "Low",
+          "min_prob": 0.0,
+          "max_prob": 0.06
+        },
+        {
+          "name": "Moderate",
+          "min_prob": 0.06,
+          "max_prob": 0.15
+        },
+        {
+          "name": "High",
+          "min_prob": 0.15,
+          "max_prob": 0.25
+        },
+        {
+          "name": "Critical",
+          "min_prob": 0.25,
+          "max_prob": 1.01
+        }
+      ]
+    },
+    "explainability": {
+      "top_k_features": 12
+    },
+    "api": {
+      "title": "Loan Default Risk API",
+      "version": "0.1.0",
+      "cors_origins": [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173"
+      ]
+    }
+  },
+  "runtime_versions": {
+    "scikit-learn": "1.9.1",
+    "numpy": "2.5.3",
+    "pandas": "2.3.3",
+    "joblib": "1.6.0"
+  },
+  "python_version": "3.13.5",
+  "training_rows": 196806,
+  "input_profile": {
+    "AMT_INCOME_TOTAL": {
+      "min": 25650.0,
+      "max": 18000090.0
+    },
+    "AMT_CREDIT": {
+      "min": 45000.0,
+      "max": 4050000.0
+    },
+    "AMT_ANNUITY": {
+      "min": 1615.5,
+      "max": 225000.0
+    },
+    "AMT_GOODS_PRICE": {
+      "min": 40500.0,
+      "max": 4050000.0
+    },
+    "AGE_YEARS": {
+      "min": 20.503764544832308,
+      "max": 69.07323750855578
+    },
+    "EMPLOYMENT_YEARS": {
+      "min": 0.0,
+      "max": 49.040383299110196
+    },
+    "CNT_FAM_MEMBERS": {
+      "min": 1.0,
+      "max": 20.0
+    },
+    "CNT_CHILDREN": {
+      "min": 0.0,
+      "max": 19.0
+    },
+    "EXT_SOURCE_1": {
+      "min": 0.0145681324124455,
+      "max": 0.9516239622079844
+    },
+    "EXT_SOURCE_2": {
+      "min": 8.173616518884397e-08,
+      "max": 0.8549996664047012
+    },
+    "EXT_SOURCE_3": {
+      "min": 0.0005272652387098,
+      "max": 0.8960095494948396
+    },
+    "REGION_POPULATION_RELATIVE": {
+      "min": 0.00029,
+      "max": 0.072508
+    },
+    "DAYS_EMPLOYED_MISSING": {
+      "min": 0.0,
+      "max": 1.0
+    },
+    "EXT_SOURCE_1_MISSING": {
+      "min": 0.0,
+      "max": 1.0
+    },
+    "EXT_SOURCE_2_MISSING": {
+      "min": 0.0,
+      "max": 1.0
+    },
+    "EXT_SOURCE_3_MISSING": {
+      "min": 0.0,
+      "max": 1.0
+    }
+  },
+  "evaluation_protocol": "train_only_fit_validation_threshold_test_report",
+  "selection_note": "CV scores after hyperparameter search are selection diagnostics, not unbiased generalization estimates.",
+  "trained_at": "2026-10-25T18:44:05Z",
   "dataset_source": "real",
   "synthetic": false,
   "synthetic_warning": null,
-  "manifest_reference": "data/manifest.json",
+  "manifest_reference": "reports/retrained/manifest.json",
   "feature_schema_version": "1.0",
   "selection_metric": "roc_auc",
-  "selection_basis": "cross_validation_5fold_mean",
+  "selection_basis": "cross_validation_3fold_mean",
   "hyperparameters_tuned": true,
-  "candidate_models": {
-    "xgboost": "XGBoost (Best Performer - Calibrated)",
-    "random_forest": "Random Forest (Ensemble Classifier)",
-    "decision_tree": "Decision Tree (Interpretable Tree)",
-    "logistic_regression": "Logistic Regression (Linear Baseline)"
-  },
   "calibration": {
     "method": "sigmoid",
     "cv": 3,
-    "brier_before": 0.19605588912963867,
-    "brier_after": 0.06520000869660358,
+    "brier_before": 0.19524209201335907,
+    "brier_after": 0.06771427334957725,
     "improved": true,
-    "status": "calibrated (sigmoid / Platt scaling via CV); continuous smooth scaling across default probability spectrum"
+    "status": "calibrated (isotonic/sigmoid via CV); probabilities adjusted toward observed frequencies"
   },
   "explainability_backends": {
     "shap_installed": true,
     "xgboost_installed": true
   },
-  "risk_score_definition": "round(default_probability * 100); bands: Low (<6%), Moderate (6-15%), High (15-25%), Critical (>25%)",
-  "responsible_use_note": "Analytical estimate of default probability and lending recommendation. Requires credit analyst oversight."
+  "risk_score_definition": "risk_score = round(default_probability * 100)",
+  "responsible_use_note": "Analytical estimate of default probability. NOT an autonomous lending decision. Requires human oversight.",
+  "file_hashes": {
+    "model.joblib": "ed51a928d9c8351a504ac4ab48ab41a4f6877caa4adc165b21ade20c145b46db",
+    "metrics.json": "0daeda9d5a070e9e20c77315119ea18ec2db12f48a637553ec6128eba3c2e5fc",
+    "feature_schema.json": "d8450e9fab57e0c99f52fbbce840b75b8b33f56b4c697996d3cd765cf1179929",
+    "models/logistic_regression.joblib": "c4d9b936072e5b6763c6f7bf03258cd0408900e4cb3e0111d811cd84aa9cb7b5",
+    "models/decision_tree.joblib": "da8412b1eec593e46e5fdac3fb6d486d488dc8e4a8e474a9e5aac9dd24d36bc1",
+    "models/random_forest.joblib": "7d337a81f84198e802612fb7d6aea229f2ae185fd10b07bc83972f97efa1a3f7",
+    "models/xgboost.joblib": "ed51a928d9c8351a504ac4ab48ab41a4f6877caa4adc165b21ade20c145b46db",
+    "dataset_manifest.json": "ed43b163fa4a3e0c007a87c92182b35df8064958debf66792a082d4ab1c456de",
+    "validation_report.json": "16551c79a98432e88a7e58625ea80da67bc3a838b6af7c383612ae66184bf56c"
+  },
+  "risk_score_config": {
+    "threshold": 0.166,
+    "bands": [
+      {
+        "name": "Low",
+        "min_prob": 0.0,
+        "max_prob": 0.06
+      },
+      {
+        "name": "Moderate",
+        "min_prob": 0.06,
+        "max_prob": 0.15
+      },
+      {
+        "name": "High",
+        "min_prob": 0.15,
+        "max_prob": 0.25
+      },
+      {
+        "name": "Critical",
+        "min_prob": 0.25,
+        "max_prob": 1.01
+      }
+    ]
+  }
 }

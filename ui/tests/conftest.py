@@ -35,6 +35,14 @@ def _write_hermetic_config() -> Path:
     with (_REPO_ROOT / "config" / "config.yaml").open("r", encoding="utf-8") as fh:
         raw = yaml.safe_load(fh)
     raw["dataset"]["source"] = "synthetic"
+    # Exercise every model without running a production-sized search in tests.
+    raw["synthetic"]["n_rows"] = 2000
+    raw["tuning"]["enabled"] = False
+    raw["selection"]["cv_folds"] = 3
+    raw["evaluation"]["bootstrap_repeats"] = 10
+    raw["models"]["random_forest"]["n_estimators"] = 20
+    raw["models"]["random_forest"]["n_jobs"] = 1
+    raw["models"]["xgboost"]["n_estimators"] = 30
     raw["paths"] = {
         "data_raw": (_TMP_ROOT / "data" / "raw").as_posix(),
         "data_synthetic": (_TMP_ROOT / "data" / "synthetic").as_posix(),

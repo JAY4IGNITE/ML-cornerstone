@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field, ValidationError, create_model, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model, field_validator, model_validator
 
 from loan_risk.schema import (
     CATEGORICAL_FEATURES,
@@ -32,6 +32,28 @@ from loan_risk.schema import (
 OPTIONAL_FIELDS = {"EXT_SOURCE_1", "EXT_SOURCE_2", "EXT_SOURCE_3",
                    "OCCUPATION_TYPE", "AMT_GOODS_PRICE", "AMT_ANNUITY",
                    "EMPLOYMENT_YEARS"}
+
+
+class ApplicantBase(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def reject_boolean_numbers(cls, value):
+        if isinstance(value, bool):
+            raise ValueError("Boolean values are not applicant measurements.")
+        return value
+
+    @model_validator(mode="after")
+    def validate_relationships(self):
+        for name in ("CNT_CHILDREN", "CNT_FAM_MEMBERS"):
+            if not float(getattr(self, name)).is_integer():
+                raise ValueError(f"{name} must be a whole number.")
+        if self.CNT_FAM_MEMBERS < self.CNT_CHILDREN + 1:
+            raise ValueError("Family size must include the applicant and children.")
+        if self.EMPLOYMENT_YEARS is not None and self.EMPLOYMENT_YEARS > self.AGE_YEARS:
+            raise ValueError("Employment duration cannot exceed applicant age.")
+        return self
 
 
 def _build_applicant_model() -> type[BaseModel]:
@@ -57,7 +79,7 @@ def _build_applicant_model() -> type[BaseModel]:
         typ = Optional[str] if optional else str
         fields[f.name] = (typ, field_info)
 
-    model = create_model("ApplicantInput", __base__=BaseModel, **fields)
+    model = create_model("ApplicantInput", __base__=ApplicantBase, **fields)
 
     # attach categorical validators
     def _make_validator(col: str):

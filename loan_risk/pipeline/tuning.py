@@ -34,7 +34,9 @@ _SCORING = {"roc_auc": "roc_auc", "pr_auc": "average_precision", "f1": "f1"}
 
 def _scoring_name(cfg: Config) -> str:
     metric = cfg["evaluation"]["selection_metric"]
-    return _SCORING.get(metric, "roc_auc")
+    if metric not in _SCORING:
+        raise ValueError(f"Unsupported model-selection metric: {metric}")
+    return _SCORING[metric]
 
 
 def cross_val_select(
@@ -53,7 +55,9 @@ def cross_val_select(
     per_model: dict[str, Any] = {}
     for spec in specs:
         pipe = build_pipeline(spec, cfg)
-        scores = cross_val_score(pipe, X, y, cv=skf, scoring=scoring, n_jobs=1)
+        scores = cross_val_score(pipe, X, y, cv=skf, scoring=scoring, n_jobs=1, error_score="raise")
+        if not np.isfinite(scores).all():
+            raise ValueError("Cross-validation returned non-finite scores.")
         per_model[spec.key] = {
             "display_name": spec.display_name,
             "scoring": scoring,
@@ -106,7 +110,7 @@ def tune_model(
         n_iter=int(tcfg.get("n_iter", 8)),
         cv=StratifiedKFold(n_splits=int(tcfg.get("cv_folds", 3)), shuffle=True,
                            random_state=cfg.seed),
-        scoring=_scoring_name(cfg), random_state=cfg.seed, n_jobs=1, refit=False,
+        scoring=_scoring_name(cfg), random_state=cfg.seed, n_jobs=1, refit=False, error_score="raise",
     )
     search.fit(Xs, ys)
     return {

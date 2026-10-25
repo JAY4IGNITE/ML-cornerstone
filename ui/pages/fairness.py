@@ -59,8 +59,8 @@ def render() -> None:
     thr = fairness.get("operating_threshold")
     if thr is not None:
         st.caption(
-            f"All threshold-dependent rates below use the F1-optimal operating "
-            f"point **{num(thr, 4)}** (chosen on validation), not the raw 0.5 cut."
+            f"All threshold-dependent rates below use the recorded diagnostic "
+            f"threshold **{num(thr, 4)}**. See Model Performance for selection details."
         )
 
     slices: dict[str, Any] = fairness.get("slices", {})

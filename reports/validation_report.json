@@ -3,12 +3,18 @@
   "n_rows": 307511,
   "n_cols": 122,
   "summary": {
-    "pass": 10,
+    "pass": 12,
     "warn": 1,
     "fail": 0
   },
   "has_errors": false,
   "checks": [
+    {
+      "name": "nonempty_dataset",
+      "status": "pass",
+      "detail": "307511 records present.",
+      "data": {}
+    },
     {
       "name": "required_columns",
       "status": "pass",
@@ -196,11 +202,20 @@
       }
     },
     {
-      "name": "duplicate_ids",
+      "name": "missing_ids",
       "status": "pass",
-      "detail": "0 duplicate SK_ID_CURR values.",
+      "detail": "0 missing or blank SK_ID_CURR values.",
       "data": {
         "count": 0
+      }
+    },
+    {
+      "name": "duplicate_ids",
+      "status": "pass",
+      "detail": "0 duplicate SK_ID_CURR values; 0 conflicting records. Only identical rows may be removed before splitting.",
+      "data": {
+        "count": 0,
+        "conflicting_records": 0
       }
     },
     {

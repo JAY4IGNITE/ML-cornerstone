@@ -62,7 +62,8 @@ def _calibration() -> None:
     st.markdown(
         "Ranking tells you the *order* of risk; calibration asks whether a "
         "predicted 20% actually defaults 20% of the time. We measure it with the "
-        "Brier score and correct it with isotonic regression fit by cross-validation."
+        "Brier score and a reliability curve. The saved model metadata records "
+        "the fitted calibration method; calibration is not a guarantee of accuracy."
     )
     render_metric_definitions(["brier"])
     st.divider()
@@ -90,7 +91,7 @@ def _risk_score(service: Any) -> None:
     st.divider()
     st.markdown("**Risk bands** (applied to the probability, from configuration)")
     try:
-        bands = service.cfg["risk_score"]["bands"]
+        bands = getattr(service, "scoring_cfg", service.cfg)["risk_score"]["bands"]
     except Exception:  # noqa: BLE001 — config is optional here; degrade gracefully
         bands = []
     if bands:

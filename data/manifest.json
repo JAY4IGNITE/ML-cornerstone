@@ -3,7 +3,7 @@
   "source_kind": "real",
   "synthetic_warning": null,
   "source_url": "https://www.kaggle.com/competitions/home-credit-default-risk",
-  "retrieval_or_generation_date": "2026-09-20T11:59:20Z",
+  "retrieval_or_generation_date": "2026-10-25T18:38:56Z",
   "primary_file": "application_train.csv",
   "license_and_usage": "Kaggle Home Credit Default Risk competition rules apply to the real data; must be accepted on Kaggle. Synthetic fixture: no license, internal use only.",
   "row_count": 307511,
@@ -238,7 +238,7 @@
     "DAYS_EMPLOYED uses the documented 365243 sentinel for pensioners/unemployed; treated as missing with an indicator."
   ],
   "validation_summary": {
-    "pass": 10,
+    "pass": 12,
     "warn": 1,
     "fail": 0
   }
