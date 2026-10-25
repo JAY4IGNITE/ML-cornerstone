@@ -148,20 +148,38 @@ def synthetic_warning(is_synthetic: bool, message: str | None, *,
 # and degrade to no-ops if a future version renames them.
 _BASE_STYLES = """
 <style>
-  .block-container { padding-top: 2.1rem; padding-bottom: 3rem; max-width: 1280px; }
-  h1 { font-weight: 700; letter-spacing: -0.02em; }
-  h2, h3 { font-weight: 650; letter-spacing: -0.01em; }
-  hr { margin: 1.15rem 0; }
+  .block-container { padding-top: 1.8rem; padding-bottom: 3rem; max-width: 1280px; }
+  h1 { font-weight: 750; letter-spacing: -0.025em; }
+  h2, h3 { font-weight: 650; letter-spacing: -0.015em; }
+  hr { margin: 1.25rem 0; opacity: 0.25; }
   [data-testid="stMetric"] {
-    background: var(--secondary-background-color); border: 1px solid var(--border-color); border-radius: 0.6rem;
-    padding: 0.85rem 1rem 0.7rem;
+    background: var(--secondary-background-color); border: 1px solid var(--border-color); border-radius: 0.75rem;
+    padding: 0.9rem 1.1rem 0.8rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
   }
-  [data-testid="stMetricLabel"] p { font-weight: 600; opacity: 0.72; }
-  [data-testid="stMetricValue"] { font-variant-numeric: tabular-nums; }
-  [data-testid="stDataFrame"] { border-radius: 0.5rem; }
-  a { color: var(--primary-color); }
+  [data-testid="stMetricLabel"] p { font-weight: 600; opacity: 0.75; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  [data-testid="stMetricValue"] { font-variant-numeric: tabular-nums; font-weight: 750; font-size: 1.6rem; }
+  [data-testid="stDataFrame"] { border-radius: 0.5rem; border: 1px solid var(--border-color); }
+  a { color: var(--primary-color); text-decoration: none; }
+  a:hover { text-decoration: underline; }
   [data-testid="baseButton-primary"], .stButton>button[kind="primary"] {
     background: var(--primary-color); border-color: var(--primary-color);
+    font-weight: 650; letter-spacing: 0.02em; padding: 0.55rem 1.2rem;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.12); border-radius: 0.5rem;
+  }
+  .fin-card {
+    background: var(--secondary-background-color);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+  }
+  .ratio-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
   }
 </style>
 """
