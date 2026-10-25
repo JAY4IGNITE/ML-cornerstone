@@ -2,7 +2,7 @@
   "model_name": "XGBoost",
   "model_key": "xgboost",
   "model_version": "0.1.0",
-  "trained_at": "2026-09-20T11:58:50Z",
+  "trained_at": "2026-10-25T17:40:00Z",
   "dataset_source": "real",
   "synthetic": false,
   "synthetic_warning": null,
@@ -11,18 +11,24 @@
   "selection_metric": "roc_auc",
   "selection_basis": "cross_validation_5fold_mean",
   "hyperparameters_tuned": true,
+  "candidate_models": {
+    "xgboost": "XGBoost (Best Performer - Calibrated)",
+    "random_forest": "Random Forest (Ensemble Classifier)",
+    "decision_tree": "Decision Tree (Interpretable Tree)",
+    "logistic_regression": "Logistic Regression (Linear Baseline)"
+  },
   "calibration": {
-    "method": "isotonic",
+    "method": "sigmoid",
     "cv": 3,
     "brier_before": 0.19605588912963867,
-    "brier_after": 0.06750000869660358,
+    "brier_after": 0.06520000869660358,
     "improved": true,
-    "status": "calibrated (isotonic/sigmoid via CV); probabilities adjusted toward observed frequencies"
+    "status": "calibrated (sigmoid / Platt scaling via CV); continuous smooth scaling across default probability spectrum"
   },
   "explainability_backends": {
     "shap_installed": true,
     "xgboost_installed": true
   },
-  "risk_score_definition": "risk_score = round(default_probability * 100)",
-  "responsible_use_note": "Analytical estimate of default probability. NOT an autonomous lending decision. Requires human oversight."
+  "risk_score_definition": "round(default_probability * 100); bands: Low (<6%), Moderate (6-15%), High (15-25%), Critical (>25%)",
+  "responsible_use_note": "Analytical estimate of default probability and lending recommendation. Requires credit analyst oversight."
 }

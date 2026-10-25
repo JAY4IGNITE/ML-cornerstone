@@ -23,6 +23,7 @@ from ui.helpers import (
     get_service,
     num,
     page_header,
+    pct,
     require_model,
     stat_cards,
     synthetic_warning,
@@ -32,6 +33,9 @@ from ui.helpers import (
 # Fixed display order (weakest → strongest CV score) so tables read consistently.
 _ORDER = ["logistic_regression", "decision_tree", "random_forest", "xgboost"]
 _TUNED_NAMES = {"random_forest": "Random Forest", "xgboost": "XGBoost"}
+
+
+from ui.pages.assessment import PRESETS
 
 
 def render() -> None:
@@ -47,9 +51,9 @@ def render() -> None:
     cv: dict[str, Any] = metrics.get("per_model_cross_validation", {})
 
     page_header(
-        "Model Selection",
+        "Model Selection & Prediction Analysis",
         f"Why **{selected}** was chosen — the cross-validated evidence behind "
-        "the decision, read directly from the training report.",
+        "the decision, plus live candidate model prediction testing.",
     )
 
     synthetic_warning(
@@ -61,12 +65,72 @@ def render() -> None:
     )
 
     _headline(cv, selected)
+    _live_model_predictor(service)
     _how_selected()
     _cv_comparison(cv, selected)
     _per_fold(cv, selected)
     _why_winner(cv, selected)
     _tuning(metrics)
     _formulas()
+
+
+def _live_model_predictor(service: Any) -> None:
+    st.subheader("Interactive Model Prediction & Output Test")
+    st.caption("Select any trained candidate model below and test how it predicts across different borrower risk profiles:")
+
+    avail_models = service.get_available_models()
+    col1, col2 = st.columns([2, 3])
+    with col1:
+        chosen_model = st.selectbox(
+            "🧠 Select Candidate Model to Test",
+            options=list(avail_models.keys()),
+            format_func=lambda k: avail_models.get(k, k),
+            key="ms_model_choice",
+        )
+    with col2:
+        profile_choice = st.selectbox(
+            "👤 Select Test Profile",
+            options=["prime", "standard", "subprime"],
+            format_func=lambda k: PRESETS[k]["title"],
+            key="ms_profile_choice",
+        )
+
+    profile_data = PRESETS[profile_choice]["data"]
+    res = service.predict(profile_data, model_key=chosen_model, with_explanation=False)
+
+    c_left, c_right = st.columns([3, 2])
+    with c_left:
+        dec_color = res.get("decision_color", "#059669")
+        st.markdown(
+            f"""
+            <div style="background:{dec_color}14;border:2px solid {dec_color};border-radius:10px;padding:14px 18px;margin-top:6px;">
+                <div style="font-size:0.8rem;font-weight:700;color:{dec_color};text-transform:uppercase;">Model Output & Decision</div>
+                <h3 style="margin:2px 0 4px;color:{dec_color};">{res.get('decision')}</h3>
+                <div style="font-size:0.95rem;color:#1e293b;">{res.get('decision_action')}</div>
+                <div style="margin-top:8px;font-size:0.85rem;color:#475569;">
+                    <b>Binary Class:</b> TARGET = {res.get('predicted_target')} ({res.get('target_label')}) &nbsp;|&nbsp;
+                    <b>P(Default):</b> {pct(res['default_probability'], 2)} &nbsp;|&nbsp;
+                    <b>Risk Score:</b> {res['risk_score']} / 100 ({res['risk_band']} Risk)
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with c_right:
+        st.markdown("**Cross-Model Prediction Consensus:**")
+        mini_rows = []
+        for mk, mr in (res.get("all_model_predictions") or {}).items():
+            is_active = (mk == chosen_model)
+            prefix = "👉 " if is_active else ""
+            mini_rows.append({
+                "Model": f"{prefix}{mr.get('display_name', mk).split('(')[0].strip()}",
+                "Prob": pct(mr.get("default_probability", 0), 1),
+                "Score": f"{mr.get('risk_score', 0)}/100",
+                "Decision": mr.get("decision", {}).get("recommendation", "").split("(")[0].strip(),
+            })
+        st.dataframe(pd.DataFrame(mini_rows), hide_index=True, use_container_width=True)
+
+    st.divider()
 
 
 def _winner_entry(cv: dict[str, Any], selected: str) -> dict[str, Any]:

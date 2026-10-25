@@ -83,14 +83,35 @@ def artifacts_exist(cfg: Config) -> bool:
     return (out / MODEL_FILE).exists() and (out / METADATA_FILE).exists()
 
 
-def load_model(cfg: Config):
-    path = cfg.path("artifacts") / MODEL_FILE
+def load_model(cfg: Config, model_key: str | None = None):
+    out = cfg.path("artifacts")
+    if model_key:
+        candidate_path = out / "models" / f"{model_key}.joblib"
+        if candidate_path.exists():
+            return joblib.load(candidate_path)
+    path = out / MODEL_FILE
     if not path.exists():
         raise FileNotFoundError(
             f"Model artifact not found at {path}. Train first: "
             f"`python -m loan_risk.pipeline.run`."
         )
     return joblib.load(path)
+
+
+def load_all_models(cfg: Config) -> dict[str, Any]:
+    """Load all available candidate models from artifacts/models/."""
+    models_dir = cfg.path("artifacts") / "models"
+    result: dict[str, Any] = {}
+    if models_dir.exists():
+        for f in models_dir.glob("*.joblib"):
+            key = f.stem
+            try:
+                result[key] = joblib.load(f)
+            except Exception:
+                pass
+    if not result and (cfg.path("artifacts") / MODEL_FILE).exists():
+        result["xgboost"] = joblib.load(cfg.path("artifacts") / MODEL_FILE)
+    return result
 
 
 def load_json(filename: str, cfg: Config) -> dict[str, Any]:

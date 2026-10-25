@@ -53,12 +53,16 @@ def render() -> None:
 
     test: dict[str, Any] = metrics["final_test_metrics"]
 
+    sel = metrics.get("selected_threshold", {})
+    op_f1 = sel.get("test_f1") if sel.get("test_f1") is not None else test.get("f1")
+    op_thr = sel.get("value", 0.166)
+
     # ---- headline KPIs ----------------------------------------------------
     stat_cards([
-        ("Test ROC-AUC", metric_value(test.get("roc_auc")), "Held-out test set"),
+        ("Test ROC-AUC", metric_value(test.get("roc_auc")), "Held-out test set ranking quality"),
         ("Test PR-AUC", metric_value(test.get("pr_auc")), "Precision–recall AUC"),
-        ("Brier score", num(test.get("brier_score"), 4), "Lower is better"),
-        ("F1", num(test.get("f1"), 4), f"At threshold {test.get('threshold')}"),
+        ("Brier score", num(test.get("brier_score"), 4), "Probability calibration accuracy"),
+        ("Optimal F1", num(op_f1, 4), f"At calibrated cutoff {num(op_thr, 3)}"),
     ])
     _pr_auc_lift(test)
 

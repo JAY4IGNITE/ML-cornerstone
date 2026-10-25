@@ -69,6 +69,7 @@ _RISK_BAND_COLOR = {
     "Moderate": "#d97706",  # amber
     "Elevated": "#ea580c",  # orange
     "High": "#dc2626",      # red
+    "Critical": "#991b1b",  # deep red
 }
 
 

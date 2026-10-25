@@ -200,10 +200,95 @@ def permutation_global_importance(
     }
 
 
+FEATURE_LABELS = {
+    "EXT_SOURCE_MEAN": "Credit Bureau Composite Score",
+    "EXT_SOURCE_1": "Credit Bureau Score 1",
+    "EXT_SOURCE_2": "Credit Bureau Score 2",
+    "EXT_SOURCE_3": "Credit Bureau Score 3",
+    "AMT_INCOME_TOTAL": "Annual Declared Income",
+    "AMT_CREDIT": "Loan Credit Amount",
+    "AMT_ANNUITY": "Loan Annuity (Periodic Payment)",
+    "AMT_GOODS_PRICE": "Goods Price",
+    "AGE_YEARS": "Applicant Age",
+    "EMPLOYMENT_YEARS": "Employment Duration",
+    "CNT_FAM_MEMBERS": "Family Members Count",
+    "CNT_CHILDREN": "Number of Children",
+    "REGION_POPULATION_RELATIVE": "Region Population Density",
+    "CREDIT_INCOME_RATIO": "Debt-to-Income (Credit/Income) Ratio",
+    "ANNUITY_INCOME_RATIO": "Payment-to-Income Ratio",
+    "CREDIT_ANNUITY_RATIO": "Loan Amount to Annuity Ratio",
+    "CREDIT_GOODS_RATIO": "Credit to Goods Price Ratio",
+    "EMPLOYMENT_AGE_RATIO": "Employment-to-Age Ratio",
+    "INCOME_PER_FAM_MEMBER": "Income Per Family Member",
+    "DAYS_EMPLOYED_MISSING": "Pensioner / Not Formally Employed",
+    "EXT_SOURCE_1_MISSING": "Missing Credit Bureau Score 1",
+    "EXT_SOURCE_2_MISSING": "Missing Credit Bureau Score 2",
+    "EXT_SOURCE_3_MISSING": "Missing Credit Bureau Score 3",
+}
+
+
+def get_feature_display_label(name: str) -> str:
+    """Format technical raw feature names into clean, readable labels."""
+    if name in FEATURE_LABELS:
+        return FEATURE_LABELS[name]
+    prefixes = [
+        ("NAME_EDUCATION_TYPE_", "Education: "),
+        ("NAME_INCOME_TYPE_", "Income: "),
+        ("NAME_FAMILY_STATUS_", "Family: "),
+        ("NAME_HOUSING_TYPE_", "Housing: "),
+        ("OCCUPATION_TYPE_", "Occupation: "),
+        ("NAME_CONTRACT_TYPE_", "Loan Type: "),
+        ("FLAG_OWN_CAR_", "Car Ownership: "),
+        ("FLAG_OWN_REALTY_", "Property Ownership: "),
+    ]
+    for prefix, label_prefix in prefixes:
+        if name.startswith(prefix):
+            val = name[len(prefix):]
+            return f"{label_prefix}{val}"
+    return name.replace("_", " ").title()
+
+
+def get_feature_reason(name: str, label: str, contribution: float, direction: str) -> str:
+    """Generate professional, plain-English rationale for risk attribution."""
+    mag = abs(contribution)
+    impact = "High" if mag > 0.15 else ("Moderate" if mag > 0.05 else "Mild")
+
+    if direction == "increases_risk":
+        if "CREDIT_INCOME" in name or "ANNUITY_INCOME" in name or "CREDIT" in name and "RATIO" in name:
+            return f"High loan obligation relative to income elevates default probability ({impact} impact)"
+        elif "EXT_SOURCE" in name:
+            return f"Low external credit rating indicates elevated historical credit risk ({impact} impact)"
+        elif "AGE" in name:
+            return f"Age bracket statistically correlated with higher financial volatility ({impact} impact)"
+        elif "EMPLOYMENT" in name:
+            return f"Shorter or less established employment history raises risk ({impact_level(mag)})"
+        elif "EDUCATION" in name:
+            return f"Educational tier historically correlated with repayment sensitivity ({impact_level(mag)})"
+        elif "MISSING" in name:
+            return f"Absence of external credit history increases lending uncertainty ({impact_level(mag)})"
+        return f"Feature value shifts risk profile upward (+{contribution:.3f})"
+    else:
+        if "EXT_SOURCE" in name:
+            return f"Strong credit bureau score demonstrates reliable repayment history ({impact} impact)"
+        elif "EDUCATION" in name:
+            return f"Higher educational attainment associated with career and income stability ({impact} impact)"
+        elif "EMPLOYMENT" in name:
+            return f"Established employment tenure provides strong repayment stability ({impact} impact)"
+        elif "INCOME" in name:
+            return f"Adequate declared earnings support monthly debt service capacity ({impact} impact)"
+        elif "RATIO" in name:
+            return f"Favorable debt-to-income balance reduces default likelihood ({impact} impact)"
+        return f"Feature value supports applicant creditworthiness ({contribution:.3f})"
+
+
+def impact_level(mag: float) -> str:
+    return "High" if mag > 0.15 else ("Moderate" if mag > 0.05 else "Mild")
+
+
 def local_explanation(estimator, X_row: pd.DataFrame, cfg: Config,
                       top_k: int | None = None) -> dict[str, Any]:
     """Per-prediction contributions for a single applicant row (1-row DF)."""
-    top_k = top_k or int(cfg["explainability"]["top_k_features"])
+    top_k = top_k or int(cfg.get("explainability", {}).get("top_k_features", 12))
     pre, model = _unwrap(estimator)
     if pre is None or model is None:
         return {"method": "unavailable", "contributions": [],
@@ -217,17 +302,33 @@ def local_explanation(estimator, X_row: pd.DataFrame, cfg: Config,
         return {"method": "unavailable", "contributions": [],
                 "note": f"transform error: {exc}"}
 
+    base_val = 0.0
+
     # --- SHAP path ---
     if _HAS_SHAP and hasattr(model, "feature_importances_"):
         try:
             explainer = shap.TreeExplainer(model)
             sv = explainer.shap_values(X_trans)
+            if hasattr(explainer, "expected_value"):
+                ev = explainer.expected_value
+                if isinstance(ev, (list, np.ndarray)):
+                    base_val = float(ev[1] if len(ev) > 1 else ev[0])
+                else:
+                    base_val = float(ev)
             row = _extract_shap_row(sv, n_features=len(names))
             if row is not None:
                 contribs = _rank_contributions(names, row, top_k)
-                return {"method": "shap_tree", "contributions": contribs,
-                        "interpretation": "SHAP values: signed contribution to the "
-                                          "model's risk output for this applicant."}
+                pos_drivers = [c for c in contribs if c["direction"] == "increases_risk"]
+                neg_drivers = [c for c in contribs if c["direction"] == "decreases_risk"]
+                return {
+                    "method": "shap_tree",
+                    "base_value": base_val,
+                    "contributions": contribs,
+                    "positive_drivers": pos_drivers,
+                    "negative_drivers": neg_drivers,
+                    "summary_text": _summarize_drivers(pos_drivers, neg_drivers),
+                    "interpretation": "SHAP values: exact signed contribution to the model's risk output for this applicant.",
+                }
         except Exception:  # fall through to native
             pass
 
@@ -238,49 +339,58 @@ def local_explanation(estimator, X_row: pd.DataFrame, cfg: Config,
         _warn_if_len_mismatch("linear_coefficient", names, coef, row)
         contrib = coef[:len(names)] * row[:len(names)]
         contribs = _rank_contributions(names, contrib, top_k)
-        return {"method": "linear_coefficient_times_value", "contributions": contribs,
-                "interpretation": "Approximate signed contribution "
-                                  "(coefficient x standardized value)."}
+        pos_drivers = [c for c in contribs if c["direction"] == "increases_risk"]
+        neg_drivers = [c for c in contribs if c["direction"] == "decreases_risk"]
+        return {
+            "method": "linear_coefficient_times_value",
+            "base_value": float(getattr(model, "intercept_", [0.0])[0]) if hasattr(model, "intercept_") else 0.0,
+            "contributions": contribs,
+            "positive_drivers": pos_drivers,
+            "negative_drivers": neg_drivers,
+            "summary_text": _summarize_drivers(pos_drivers, neg_drivers),
+            "interpretation": "Approximate signed contribution (coefficient x standardized feature value).",
+        }
 
     # --- Tree fallback without SHAP: use global importances (unsigned) ---
     if hasattr(model, "feature_importances_"):
         vals = np.asarray(model.feature_importances_, dtype=float)
         _warn_if_len_mismatch("tree_importance_fallback", names, vals)
         contribs = _rank_contributions(names, vals[:len(names)], top_k, signed=False)
-        return {"method": "tree_importance_fallback", "contributions": contribs,
-                "note": "SHAP not installed; showing model global importances as "
-                        "an APPROXIMATION (not a per-applicant attribution).",
-                "interpretation": "Approximate association, not causation."}
+        return {
+            "method": "tree_importance_fallback",
+            "contributions": contribs,
+            "positive_drivers": [],
+            "negative_drivers": [],
+            "summary_text": "Model tree split importance approximation.",
+            "note": "Showing model feature importances as an APPROXIMATION.",
+            "interpretation": "Feature association with overall model risk splits.",
+        }
 
     return {"method": "unavailable", "contributions": [],
             "note": "No supported explanation mechanism for this model."}
 
 
-def _warn_if_len_mismatch(where: str, names, *arrays) -> None:
-    """Log (do not crash) when explanation arrays don't align with feature names.
+def _summarize_drivers(pos_drivers: list[dict], neg_drivers: list[dict]) -> str:
+    """Generate concise plain-English summary of risk drivers."""
+    points = []
+    if pos_drivers:
+        top_pos = pos_drivers[0]["display_label"]
+        points.append(f"Primary risk elevator: **{top_pos}**")
+    if neg_drivers:
+        top_neg = neg_drivers[0]["display_label"]
+        points.append(f"Primary risk reducer: **{top_neg}**")
+    return " · ".join(points) if points else "No dominant drivers identified."
 
-    Local explanations are served per-request, so we degrade gracefully rather
-    than raise — but a mismatch means contributions could be mislabeled, which
-    must not pass silently. In the current single-ColumnTransformer design the
-    lengths always match; this guards against future drift.
-    """
+
+def _warn_if_len_mismatch(where: str, names, *arrays) -> None:
     for arr in arrays:
         if len(arr) != len(names):
             logger.warning(
-                "local_explanation[%s]: length mismatch (%d names vs %d values); "
-                "contributions truncated to the shorter length and may be misaligned.",
+                "local_explanation[%s]: length mismatch (%d names vs %d values)",
                 where, len(names), len(arr))
 
 
 def _extract_shap_row(sv, n_features: int) -> np.ndarray | None:
-    """Normalize SHAP output (which varies by version/model) to a 1-D vector of
-    per-feature contributions for a single row, positive class.
-
-    Handles:
-      * list[array] (older API): index 1 = positive class
-      * ndarray (n_samples, n_features)                 -> row 0
-      * ndarray (n_samples, n_features, n_classes)      -> row 0, class 1
-    """
     if isinstance(sv, list):
         sv = sv[1] if len(sv) > 1 else sv[0]
     arr = np.asarray(sv, dtype=float)
@@ -298,13 +408,28 @@ def _extract_shap_row(sv, n_features: int) -> np.ndarray | None:
 def _rank_contributions(names, values, top_k: int, signed: bool = True) -> list[dict]:
     values = np.asarray(values, dtype=float)
     n = min(len(names), len(values))
-    order = np.argsort(np.abs(values[:n]))[::-1][:top_k]
+    # Exclude legally protected demographic attributes (CODE_GENDER) from risk attribution
+    valid_indices = [
+        i for i in range(n)
+        if not str(names[i]).startswith("CODE_GENDER")
+    ]
+    if not valid_indices:
+        valid_indices = list(range(n))
+
+    order = sorted(valid_indices, key=lambda i: abs(values[i]), reverse=True)[:top_k]
     out = []
     for i in order:
+        feat_name = str(names[i])
+        val = float(values[i])
+        direction = ("increases_risk" if val > 0 else "decreases_risk") if signed else "n/a"
+        label = get_feature_display_label(feat_name)
+        reason = get_feature_reason(feat_name, label, val, direction) if signed else "General model association"
         out.append({
-            "feature": str(names[i]),
-            "contribution": float(values[i]),
-            "direction": ("increases_risk" if values[i] > 0 else "decreases_risk")
-            if signed else "n/a",
+            "feature": feat_name,
+            "display_label": label,
+            "contribution": val,
+            "abs_contribution": abs(val),
+            "direction": direction,
+            "reason": reason,
         })
     return out

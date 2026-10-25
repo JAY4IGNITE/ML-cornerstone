@@ -131,58 +131,113 @@ def _importance_block(block: dict[str, Any], *, kind: str) -> None:
     st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
 
 
+from ui.pages.assessment import PRESETS
+from ui.state import get_prediction, save_prediction
+
+
 def _applicant_explanation() -> None:
-    st.subheader("Applicant-level explanation")
+    service = get_service()
+    st.subheader("Applicant-level SHAP explainability")
 
     pred = get_prediction()
     if pred is None:
-        st.info(
-            "**No applicant assessed yet** — Submit an applicant on the Risk "
-            "Assessment page to see which features drove that specific estimate."
-        )
+        st.info("ℹ️ **No applicant assessed yet.** Select a test profile below to generate an instantaneous SHAP attribution:")
+        cols = st.columns(3)
+        for col, (pkey, pval) in zip(cols, PRESETS.items()):
+            with col:
+                if st.button(pval["title"], key=f"expl_btn_{pkey}", use_container_width=True):
+                    res = service.predict(pval["data"])
+                    save_prediction(pval["data"], res)
+                    st.rerun()
+                st.caption(pval["desc"])
         return
 
     result: dict[str, Any] = pred["result"]
-    expl = result.get("explanation")
+    expl = result.get("explanation") or {}
+    contribs = expl.get("contributions") or []
 
+    # Applicant status bar
+    dec_color = result.get("decision_color", "#059669")
     st.markdown(
-        f"Estimated default probability **{pct(result['default_probability'], 1)}** "
-        f"· model version {result['model_version']}."
+        f"""
+        <div style="background:{dec_color}14;border:1px solid {dec_color};border-radius:8px;padding:12px 18px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;">
+            <div>
+                <span style="font-size:0.8rem;font-weight:700;color:{dec_color};text-transform:uppercase;">Evaluated Profile</span>
+                <div style="font-size:1.25rem;font-weight:800;color:{dec_color};">{result.get('decision', 'Assessment Complete')} · TARGET = {result.get('predicted_target', 0)}</div>
+            </div>
+            <div style="text-align:right;">
+                <div style="font-size:0.85rem;color:#64748b;">Default Probability: <b>{pct(result['default_probability'], 2)}</b> | Risk Score: <b>{result['risk_score']}/100</b></div>
+                <div style="font-size:0.8rem;color:#475569;">Model: <b>{result.get('model_name', 'Primary Model')}</b></div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
-    st.markdown(risk_band_badge(result["risk_band"]), unsafe_allow_html=True)
 
-    if not result["explanation_available"]:
+    if not result.get("explanation_available") or not contribs:
         st.info(
-            "**No per-applicant explanation** — This model does not produce "
-            "per-applicant feature contributions. See the global feature "
-            "importance above for model-level drivers."
+            "**No per-applicant SHAP explanation** — Local attribution is not available for this model. "
+            "See global feature importance above."
         )
-    elif expl and expl.get("contributions"):
-        st.markdown(f"Method: `{expl.get('method')}`")
-        if expl.get("interpretation"):
-            st.markdown(expl["interpretation"])
-        if expl.get("note"):
-            st.markdown(expl["note"])
+        return
 
-        # Signed contributions: positive increases risk, negative decreases it.
-        rows = [{
-            "Feature": c.get("feature"),
-            "Contribution": f"{float(c.get('contribution', 0.0)):+.4f}",
-            "Direction": c.get("direction"),
-        } for c in expl["contributions"]]
-        st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
-        st.caption("Positive contributions increase estimated risk; negative decrease it.")
-    else:
-        # explanation_available was True but contributions came back empty.
-        st.info(
-            "**No contributions returned** — An explanation was expected for "
-            "this applicant but no feature contributions were returned."
-        )
+    st.markdown(f"**Explanation Backend**: `{expl.get('method', 'shap_tree')}` — Game-theoretic exact feature attribution.")
+    if expl.get("summary_text"):
+        st.info(f"💡 **Key Driver Summary**: {expl['summary_text']}")
 
-    # Always shown: these attributions are not a lending justification.
-    st.warning(
-        "**Approximate — not adverse-action reasons** — Feature contributions "
-        "are approximate attributions for a single estimate. They must not be "
-        "used as adverse-action reasons or as a substitute for a documented, "
-        "human lending decision."
+    # --- Interactive SHAP Contribution Bar Chart ---
+    st.markdown("##### 📊 SHAP Feature Attribution Chart (Diverging Impact)")
+    st.caption(
+        "Features in **Red** pushed the predicted default risk **UP** (higher risk of default). "
+        "Features in **Green** pushed the default risk **DOWN** (supporting creditworthiness)."
+    )
+
+    plot_data = []
+    for c in contribs:
+        val = float(c.get("contribution", 0.0))
+        label = c.get("display_label", c.get("feature"))
+        plot_data.append({
+            "Feature": label,
+            "Contribution": val,
+            "Absolute": abs(val),
+            "Impact Type": "Increases Risk (+)" if val > 0 else "Decreases Risk (-)",
+            "Reason": c.get("reason", ""),
+        })
+
+    df_shap = pd.DataFrame(plot_data).sort_values("Absolute", ascending=False).head(12)
+
+    # Diverging horizontal bar chart
+    shap_chart = alt.Chart(df_shap).mark_bar(cornerRadius=3).encode(
+        y=alt.Y("Feature:N", sort=df_shap["Feature"].tolist(), title=None),
+        x=alt.X("Contribution:Q", title="SHAP Impact (Log-Odds / Probability Contribution)"),
+        color=alt.Color(
+            "Impact Type:N",
+            scale=alt.Scale(
+                domain=["Increases Risk (+)", "Decreases Risk (-)"],
+                range=["#dc2626", "#059669"],
+            ),
+            legend=alt.Legend(orient="top", title=None),
+        ),
+        tooltip=[
+            alt.Tooltip("Feature:N", title="Factor"),
+            alt.Tooltip("Contribution:Q", format="+.4f", title="SHAP Value"),
+            alt.Tooltip("Impact Type:N", title="Direction"),
+            alt.Tooltip("Reason:N", title="Rationale"),
+        ],
+    )
+    charts.show(shap_chart, height=max(220, 28 * len(df_shap)))
+
+    # --- Feature Breakdown Table ---
+    st.markdown("##### 📋 Detailed Factor-by-Factor Analysis")
+    table_rows = [{
+        "Factor": c.get("display_label", c.get("feature")),
+        "SHAP Impact": f"{float(c.get('contribution', 0.0)):+.4f}",
+        "Direction": "🔴 Increases Risk" if c.get("direction") == "increases_risk" else "🟢 Decreases Risk",
+        "Underwriting Rationale": c.get("reason", ""),
+    } for c in contribs]
+    st.dataframe(pd.DataFrame(table_rows), hide_index=True, use_container_width=True)
+
+    st.caption(
+        "SHAP (SHapley Additive exPlanations) computes the exact Shapley values from cooperative game theory, "
+        "allocating credit and blame fairly among all input features for this individual assessment."
     )

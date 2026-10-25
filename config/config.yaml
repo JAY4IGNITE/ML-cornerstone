@@ -71,7 +71,7 @@ models:
     colsample_bytree: 0.8
 
 calibration:
-  method: "isotonic"            # isotonic | sigmoid
+  method: "sigmoid"             # sigmoid (Platt scaling) avoids flat plateau on imbalanced data
   cv: 3
 
 evaluation:
@@ -109,13 +109,14 @@ tuning:
       model__colsample_bytree: [0.7, 0.8, 1.0]
 
 risk_score:
-  # Transparent, explicitly-defined mapping from probability -> 0..100 score.
-  # score = round(default_probability * 100). Bands are on probability.
+  # Transparent, calibrated mapping from probability -> 0..100 score.
+  # Threshold matches the validation-optimal operating point for binary decision.
+  threshold: 0.166
   bands:
-    - { name: "Low",       min_prob: 0.00, max_prob: 0.08 }
-    - { name: "Moderate",  min_prob: 0.08, max_prob: 0.20 }
-    - { name: "Elevated",  min_prob: 0.20, max_prob: 0.40 }
-    - { name: "High",      min_prob: 0.40, max_prob: 1.01 }
+    - { name: "Low",       min_prob: 0.00, max_prob: 0.06 }
+    - { name: "Moderate",  min_prob: 0.06, max_prob: 0.15 }
+    - { name: "High",      min_prob: 0.15, max_prob: 0.25 }
+    - { name: "Critical",  min_prob: 0.25, max_prob: 1.01 }
 
 explainability:
   top_k_features: 12

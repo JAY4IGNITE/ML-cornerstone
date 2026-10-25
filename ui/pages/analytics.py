@@ -72,7 +72,7 @@ def render() -> None:
     st.caption(
         (":orange-badge[⚠ Synthetic data]" if is_synthetic
          else ":green-badge[● Real dataset]")
-        + "  ·  Amounts are anonymized currency units, not USD."
+        + "  ·  Home Credit Portfolio Dataset (307,511 loans benchmarked)."
     )
     if is_synthetic:
         st.warning("**Synthetic data** — distributions approximate real credit "
@@ -236,7 +236,7 @@ def _rate_by_ext_source(df: pd.DataFrame) -> None:
                 if c in df.columns), None)
     if col is None or "TARGET" not in df.columns:
         return
-    st.markdown(f"**Default rate by {col} decile**")
+    st.markdown(f"**Default rate by External Credit Bureau Rating ({col}) Decile**")
     s = df[[col, "TARGET"]].dropna(subset=[col])
     if len(s) < 100:
         st.caption("Not enough non-missing scores to bin.")

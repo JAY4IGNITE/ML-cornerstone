@@ -49,3 +49,9 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# ---- Temporary chart data & presentation build ----
+.chart-data-*/
+.presentation-build/
+.claude/
+

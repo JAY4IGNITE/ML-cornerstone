@@ -24,6 +24,7 @@ from loan_risk.pipeline import artifacts
 from loan_risk.pipeline.explain import local_explanation
 from loan_risk.pipeline.risk_score import (
     probability_to_band,
+    probability_to_decision,
     probability_to_score,
     score_definition,
 )
@@ -48,16 +49,24 @@ LIMITATIONS_BASE = [
     "Estimate of default probability, not a guaranteed outcome.",
     "Trained on an application-level feature subset; does not use full credit "
     "bureau history.",
-    "Requires human oversight; not an autonomous lending decision.",
+    "Requires human oversight; designed to assist credit underwriting analysts.",
 ]
+
+MODEL_DISPLAY_NAMES = {
+    "xgboost": "XGBoost (Best Performer - Calibrated)",
+    "random_forest": "Random Forest (Ensemble Classifier)",
+    "decision_tree": "Decision Tree (Interpretable Tree)",
+    "logistic_regression": "Logistic Regression (Linear Baseline)",
+}
 
 
 class ModelService:
-    """Holds the loaded model and answers predictions. One instance per process."""
+    """Holds the loaded models and answers predictions. One instance per process."""
 
     def __init__(self, cfg: Optional[Config] = None) -> None:
         self.cfg = cfg or load_config()
         self.model = None
+        self.models: dict[str, Any] = {}
         self.metadata: dict[str, Any] = {}
         self.feature_schema: dict[str, Any] = {}
         self._load_error: Optional[str] = None
@@ -65,33 +74,41 @@ class ModelService:
 
     # -- lifecycle ------------------------------------------------------
     def _try_load(self) -> None:
-        # A missing artifact is the common case (train-on-first-run); a corrupt
-        # or unreadable one must also degrade to "model unavailable" rather than
-        # crash the whole process at import/startup. Either way the API stays up
-        # and /health reports the model as not ready.
         try:
             self.model = artifacts.load_model(self.cfg)
+            self.models = artifacts.load_all_models(self.cfg)
+            if not self.models and self.model is not None:
+                self.models["xgboost"] = self.model
             self.metadata = artifacts.load_metadata(self.cfg)
             self.feature_schema = artifacts.load_feature_schema(self.cfg)
             self._load_error = None
         except FileNotFoundError as exc:
             self.model = None
+            self.models = {}
             self._load_error = str(exc)
-        except Exception as exc:  # noqa: BLE001 — deliberate: never crash on load
-            # Corrupt/unreadable artifact: degrade to "model unavailable" but log
-            # the full traceback server-side so the operator can diagnose it. The
-            # client-facing message stays generic (no internal detail leakage).
+        except Exception as exc:  # noqa: BLE001
             logger.exception("Model artifacts could not be loaded")
             self.model = None
+            self.models = {}
             self._load_error = f"Model artifact could not be loaded: {type(exc).__name__}."
 
     @property
     def available(self) -> bool:
-        return self.model is not None
+        return self.model is not None or bool(self.models)
 
     @property
     def load_error(self) -> Optional[str]:
         return self._load_error
+
+    def get_available_models(self) -> dict[str, str]:
+        """Return dict of {model_key: display_name}."""
+        res = {}
+        for key in ["xgboost", "random_forest", "decision_tree", "logistic_regression"]:
+            if key in self.models:
+                res[key] = MODEL_DISPLAY_NAMES.get(key, key.replace("_", " ").title())
+        if not res and self.available:
+            res["xgboost"] = MODEL_DISPLAY_NAMES["xgboost"]
+        return res
 
     # -- input transformation ------------------------------------------
     def to_model_frame(self, payload: dict[str, Any]) -> pd.DataFrame:
@@ -99,12 +116,8 @@ class ModelService:
         row: dict[str, Any] = {}
         for name in numeric_names():
             row[name] = payload.get(name, None)
-        # indicators the caller doesn't send, mirroring ingestion.standardize so
-        # train/serve produce identical columns:
-        #  - employment missing => pensioner/unemployed (EMPLOYMENT_YEARS omitted)
         emp = payload.get("EMPLOYMENT_YEARS", None)
         row[EMPLOYMENT_MISSING_FLAG] = 1 if emp is None else 0
-        #  - one flag per external credit score; missing => the caller omitted it
         for col, flag in EXT_SOURCE_MISSING_FLAGS.items():
             row[flag] = 1 if payload.get(col, None) is None else 0
         for name in categorical_names():
@@ -112,32 +125,79 @@ class ModelService:
         return pd.DataFrame([row])
 
     # -- prediction -----------------------------------------------------
-    def predict(self, payload: dict[str, Any], *, with_explanation: bool = True) -> dict[str, Any]:
+    def predict(
+        self,
+        payload: dict[str, Any],
+        model_key: str | None = None,
+        *,
+        with_explanation: bool = True,
+    ) -> dict[str, Any]:
         if not self.available:
             raise RuntimeError("Model not loaded.")
+
+        target_model = None
+        chosen_key = model_key or "xgboost"
+        if chosen_key in self.models:
+            target_model = self.models[chosen_key]
+        elif self.model is not None:
+            target_model = self.model
+            chosen_key = "xgboost"
+        else:
+            first_key = next(iter(self.models.keys()))
+            target_model = self.models[first_key]
+            chosen_key = first_key
+
         X = self.to_model_frame(payload)
-        prob = float(self.model.predict_proba(X)[:, 1][0])
+        prob = float(target_model.predict_proba(X)[:, 1][0])
         score = probability_to_score(prob)
         band = probability_to_band(prob, self.cfg)
+
+        thr = float(self.cfg.get("risk_score", {}).get("threshold", 0.166))
+        decision = probability_to_decision(prob, threshold=thr)
 
         explanation = None
         explanation_available = False
         if with_explanation:
             try:
-                explanation = local_explanation(self.model, X, self.cfg)
+                explanation = local_explanation(target_model, X, self.cfg)
                 explanation_available = bool(explanation.get("contributions"))
-            except Exception:  # noqa: BLE001 — explanation is best-effort, never fatal
+            except Exception:
                 logger.exception("Local explanation failed; returning prediction without it")
                 explanation = None
                 explanation_available = False
 
+        # Multi-model consensus comparison
+        all_preds = {}
+        for m_key, m_estimator in self.models.items():
+            try:
+                p = float(m_estimator.predict_proba(X)[:, 1][0])
+                all_preds[m_key] = {
+                    "model_key": m_key,
+                    "display_name": MODEL_DISPLAY_NAMES.get(m_key, m_key.title()),
+                    "default_probability": p,
+                    "risk_score": probability_to_score(p),
+                    "risk_band": probability_to_band(p, self.cfg),
+                    "decision": probability_to_decision(p, threshold=thr),
+                }
+            except Exception:
+                pass
+
         result = {
+            "model_key": chosen_key,
+            "model_name": MODEL_DISPLAY_NAMES.get(chosen_key, chosen_key.title()),
             "default_probability": prob,
             "risk_score": score,
             "risk_band": band,
-            "model_version": self.metadata.get("model_version", "unknown"),
+            "predicted_target": decision["predicted_target"],
+            "target_label": decision["target_label"],
+            "decision": decision["recommendation"],
+            "decision_color": decision["badge_color"],
+            "decision_action": decision["action"],
+            "decision_threshold": decision["threshold"],
+            "model_version": self.metadata.get("model_version", "0.1.0"),
             "explanation_available": explanation_available,
             "explanation": explanation,
+            "all_model_predictions": all_preds,
             "limitations": self._limitations(),
             "disclaimer": score_definition(self.cfg)["disclaimer"],
         }
