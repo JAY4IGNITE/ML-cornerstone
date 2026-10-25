@@ -35,6 +35,9 @@ METRICS_FILE = "metrics.json"
 
 
 def file_sha256(path: Path) -> str:
+    if path.suffix == ".json":
+        data = path.read_bytes().replace(b"\r\n", b"\n")
+        return hashlib.sha256(data).hexdigest()
     with path.open("rb") as fh:
         return hashlib.file_digest(fh, "sha256").hexdigest()
 
@@ -49,9 +52,13 @@ def verify_bundle(cfg: Config, metadata: dict[str, Any]) -> None:
     for name, expected in hashes.items():
         path = (root / name).resolve()
         if not path.is_relative_to(root) or not path.is_file():
-            raise ValueError("Artifact bundle is incomplete or has an invalid path.")
-        if file_sha256(path) != expected:
-            raise ValueError("Artifact checksum mismatch; retrain or restore the complete bundle.")
+            raise ValueError(f"Artifact bundle is incomplete: missing {name}")
+        actual = file_sha256(path)
+        if actual != expected:
+            raise ValueError(
+                f"Artifact checksum mismatch for {name} (expected {expected[:8]}..., got {actual[:8]}...); "
+                "retrain or restore the complete bundle."
+            )
 
 
 def build_feature_schema() -> dict[str, Any]:
@@ -90,7 +97,7 @@ def save_json(obj: dict[str, Any], filename: str, cfg: Config) -> Path:
     out = cfg.path("artifacts")
     out.mkdir(parents=True, exist_ok=True)
     path = out / filename
-    with path.open("w", encoding="utf-8") as fh:
+    with path.open("w", encoding="utf-8", newline="\n") as fh:
         json.dump(obj, fh, indent=2, default=str, allow_nan=False)
     return path
 

@@ -381,14 +381,14 @@
   "responsible_use_note": "Analytical estimate of default probability. NOT an autonomous lending decision. Requires human oversight.",
   "file_hashes": {
     "model.joblib": "ed51a928d9c8351a504ac4ab48ab41a4f6877caa4adc165b21ade20c145b46db",
-    "metrics.json": "0daeda9d5a070e9e20c77315119ea18ec2db12f48a637553ec6128eba3c2e5fc",
-    "feature_schema.json": "d8450e9fab57e0c99f52fbbce840b75b8b33f56b4c697996d3cd765cf1179929",
+    "metrics.json": "4419c06cf096b8e97f10e3aa58cd90b734404f87d07b92efb992db6deda4d977",
+    "feature_schema.json": "32929326b89f0dae3c56f23d3e448e64246ab627f18b815e4163a31a3c1c9769",
     "models/logistic_regression.joblib": "c4d9b936072e5b6763c6f7bf03258cd0408900e4cb3e0111d811cd84aa9cb7b5",
     "models/decision_tree.joblib": "da8412b1eec593e46e5fdac3fb6d486d488dc8e4a8e474a9e5aac9dd24d36bc1",
     "models/random_forest.joblib": "7d337a81f84198e802612fb7d6aea229f2ae185fd10b07bc83972f97efa1a3f7",
     "models/xgboost.joblib": "ed51a928d9c8351a504ac4ab48ab41a4f6877caa4adc165b21ade20c145b46db",
-    "dataset_manifest.json": "ed43b163fa4a3e0c007a87c92182b35df8064958debf66792a082d4ab1c456de",
-    "validation_report.json": "16551c79a98432e88a7e58625ea80da67bc3a838b6af7c383612ae66184bf56c"
+    "dataset_manifest.json": "138ee023c12953175e6ce9bc9bcb2a0bc3be773a1f6bd9f65a8c5a810062e3e4",
+    "validation_report.json": "64d3bf94c3c478e6f16714ccc5f1b21b235721a058fd5ef14b13c011dbe7bb4b"
   },
   "risk_score_config": {
     "threshold": 0.166,

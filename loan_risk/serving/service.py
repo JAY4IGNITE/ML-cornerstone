@@ -106,7 +106,7 @@ class ModelService:
             logger.exception("Model artifacts could not be loaded")
             self.model = None
             self.models = {}
-            self._load_error = f"Model artifact could not be loaded: {type(exc).__name__}."
+            self._load_error = f"Model artifact could not be loaded: {type(exc).__name__}: {exc}"
 
     @property
     def available(self) -> bool:

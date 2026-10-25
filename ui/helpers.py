@@ -127,7 +127,9 @@ def require_model(service: ModelService) -> None:
     """Gate a page that needs a loaded model. Reproduces the old ErrorState
     'Model or data not ready' path: render the notice + train hint, then stop."""
     if not service.available:
-        st.warning("**Model or data not ready** — " + TRAIN_HINT)
+        load_error = getattr(service, "load_error", None)
+        err_msg = f" ({load_error})" if load_error else ""
+        st.warning(f"**Model or data not ready**{err_msg} — " + TRAIN_HINT)
         st.stop()
 
 
