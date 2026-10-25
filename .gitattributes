@@ -1,0 +1,6 @@
+data/raw/application_train.csv filter=lfs diff=lfs merge=lfs -text
+
+# Checksummed release files must retain their exact bytes on every platform.
+artifacts/*.json -text
+artifacts/*.joblib -text
+artifacts/models/*.joblib -text
