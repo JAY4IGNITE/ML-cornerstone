@@ -29,15 +29,34 @@ def add_engineered_features(df: pd.DataFrame) -> pd.DataFrame:
         den = den.replace(0, np.nan)
         return num / den
 
-    out["CREDIT_INCOME_RATIO"] = safe_div(out["AMT_CREDIT"], out["AMT_INCOME_TOTAL"])
-    out["ANNUITY_INCOME_RATIO"] = safe_div(out["AMT_ANNUITY"], out["AMT_INCOME_TOTAL"])
-    out["CREDIT_ANNUITY_RATIO"] = safe_div(out["AMT_CREDIT"], out["AMT_ANNUITY"])
-    out["CREDIT_GOODS_RATIO"] = safe_div(out["AMT_CREDIT"], out["AMT_GOODS_PRICE"])
-    out["EMPLOYMENT_AGE_RATIO"] = safe_div(out["EMPLOYMENT_YEARS"], out["AGE_YEARS"])
-    out["EXT_SOURCE_MEAN"] = out[["EXT_SOURCE_1", "EXT_SOURCE_2", "EXT_SOURCE_3"]].mean(
-        axis=1, skipna=True
-    )
-    out["INCOME_PER_FAM_MEMBER"] = safe_div(out["AMT_INCOME_TOTAL"], out["CNT_FAM_MEMBERS"])
+    def _col(name: str) -> pd.Series:
+        if name in out.columns:
+            return out[name]
+        return pd.Series(np.nan, index=out.index)
+
+    out["CREDIT_INCOME_RATIO"] = safe_div(_col("AMT_CREDIT"), _col("AMT_INCOME_TOTAL"))
+    out["ANNUITY_INCOME_RATIO"] = safe_div(_col("AMT_ANNUITY"), _col("AMT_INCOME_TOTAL"))
+    out["CREDIT_ANNUITY_RATIO"] = safe_div(_col("AMT_CREDIT"), _col("AMT_ANNUITY"))
+    out["CREDIT_GOODS_RATIO"] = safe_div(_col("AMT_CREDIT"), _col("AMT_GOODS_PRICE"))
+    out["EMPLOYMENT_AGE_RATIO"] = safe_div(_col("EMPLOYMENT_YEARS"), _col("AGE_YEARS"))
+    ext_cols = [c for c in ["EXT_SOURCE_1", "EXT_SOURCE_2", "EXT_SOURCE_3"] if c in out.columns]
+    if ext_cols:
+        ext_frame = out[ext_cols]
+        out["EXT_SOURCE_MEAN"] = ext_frame.mean(axis=1, skipna=True)
+        out["EXT_SOURCE_MIN"] = ext_frame.min(axis=1, skipna=True)
+        out["EXT_SOURCE_MAX"] = ext_frame.max(axis=1, skipna=True)
+        out["EXT_SOURCE_STD"] = ext_frame.std(axis=1, skipna=True)
+    else:
+        out["EXT_SOURCE_MEAN"] = np.nan
+        out["EXT_SOURCE_MIN"] = np.nan
+        out["EXT_SOURCE_MAX"] = np.nan
+        out["EXT_SOURCE_STD"] = np.nan
+    out["INCOME_PER_FAM_MEMBER"] = safe_div(_col("AMT_INCOME_TOTAL"), _col("CNT_FAM_MEMBERS"))
+    out["PAYMENT_RATE"] = safe_div(_col("AMT_ANNUITY"), _col("AMT_CREDIT"))
+    out["GOODS_CREDIT_DIFF"] = _col("AMT_CREDIT") - _col("AMT_GOODS_PRICE")
+    out["AGE_EMPLOYED_DIFF"] = _col("AGE_YEARS") - _col("EMPLOYMENT_YEARS")
+    out["CHILDREN_RATIO"] = safe_div(_col("CNT_CHILDREN"), _col("CNT_FAM_MEMBERS"))
+    out["INCOME_MINUS_ANNUITY"] = _col("AMT_INCOME_TOTAL") - _col("AMT_ANNUITY")
 
     # replace any residual inf (belt-and-suspenders) with NaN
     eng = engineered_names()

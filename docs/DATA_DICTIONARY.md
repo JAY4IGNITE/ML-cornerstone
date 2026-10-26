@@ -125,6 +125,14 @@ never infinity.
 | `EMPLOYMENT_AGE_RATIO` | `EMPLOYMENT_YEARS / AGE_YEARS` | `EMPLOYMENT_YEARS`, `AGE_YEARS` | ratio | Share of life in current employment; stability proxy. | Safe: derived from applicant attributes. |
 | `EXT_SOURCE_MEAN` | `mean(EXT_SOURCE_1, EXT_SOURCE_2, EXT_SOURCE_3)` ignoring NaN | `EXT_SOURCE_1`, `EXT_SOURCE_2`, `EXT_SOURCE_3` | score 0-1 | Aggregate external creditworthiness signal. | Safe: external scores are inputs, not outcomes. |
 | `INCOME_PER_FAM_MEMBER` | `AMT_INCOME_TOTAL / CNT_FAM_MEMBERS` | `AMT_INCOME_TOTAL`, `CNT_FAM_MEMBERS` | currency | Per-capita household income. | Safe: both known at application time. |
+| `PAYMENT_RATE` | `AMT_ANNUITY / AMT_CREDIT` | `AMT_ANNUITY`, `AMT_CREDIT` | ratio (~rate) | Loan annuity relative to total credit (payment rate / installment burden). | Safe: both known at application time. |
+| `GOODS_CREDIT_DIFF` | `AMT_CREDIT - AMT_GOODS_PRICE` | `AMT_CREDIT`, `AMT_GOODS_PRICE` | currency | Excess borrowed over goods price (>0 indicates fee/cash financing, <0 indicates down payment). | Safe: both known at application time. |
+| `EXT_SOURCE_MIN` | `min(EXT_SOURCE_1, EXT_SOURCE_2, EXT_SOURCE_3)` ignoring NaN | `EXT_SOURCE_1`, `EXT_SOURCE_2`, `EXT_SOURCE_3` | score 0-1 | Worst rating among available external credit bureau sources. | Safe: external scores are inputs known at application time. |
+| `EXT_SOURCE_MAX` | `max(EXT_SOURCE_1, EXT_SOURCE_2, EXT_SOURCE_3)` ignoring NaN | `EXT_SOURCE_1`, `EXT_SOURCE_2`, `EXT_SOURCE_3` | score 0-1 | Best rating among available external credit bureau sources. | Safe: external scores are inputs known at application time. |
+| `EXT_SOURCE_STD` | `std(EXT_SOURCE_1, EXT_SOURCE_2, EXT_SOURCE_3)` ignoring NaN | `EXT_SOURCE_1`, `EXT_SOURCE_2`, `EXT_SOURCE_3` | score 0-1 | Standard deviation across external sources (measures bureau consensus). | Safe: external scores are inputs known at application time. |
+| `AGE_EMPLOYED_DIFF` | `AGE_YEARS - EMPLOYMENT_YEARS` | `AGE_YEARS`, `EMPLOYMENT_YEARS` | years | Age of client when starting current employment. | Safe: derived from application inputs. |
+| `CHILDREN_RATIO` | `CNT_CHILDREN / CNT_FAM_MEMBERS` | `CNT_CHILDREN`, `CNT_FAM_MEMBERS` | ratio | Ratio of children to total family members (dependent burden). | Safe: both known at application time. |
+| `INCOME_MINUS_ANNUITY` | `AMT_INCOME_TOTAL - AMT_ANNUITY` | `AMT_INCOME_TOTAL`, `AMT_ANNUITY` | currency | Net disposable annual income proxy after annual debt service. | Safe: both known at application time. |
 
 ---
 

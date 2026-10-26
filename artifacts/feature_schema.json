@@ -334,6 +334,97 @@
       "unit": "currency",
       "interpretation": "Per-capita household income.",
       "leakage_assessment": "Safe: both known at application time."
+    },
+    {
+      "name": "PAYMENT_RATE",
+      "formula": "AMT_ANNUITY / AMT_CREDIT",
+      "inputs": [
+        "AMT_ANNUITY",
+        "AMT_CREDIT"
+      ],
+      "unit": "ratio (~rate)",
+      "interpretation": "Loan annuity relative to total credit (payment rate / installment burden).",
+      "leakage_assessment": "Safe: both known at application time."
+    },
+    {
+      "name": "GOODS_CREDIT_DIFF",
+      "formula": "AMT_CREDIT - AMT_GOODS_PRICE",
+      "inputs": [
+        "AMT_CREDIT",
+        "AMT_GOODS_PRICE"
+      ],
+      "unit": "currency",
+      "interpretation": "Excess borrowed over goods price (>0 indicates fee/cash financing, <0 indicates down payment).",
+      "leakage_assessment": "Safe: both known at application time."
+    },
+    {
+      "name": "EXT_SOURCE_MIN",
+      "formula": "min(EXT_SOURCE_1, EXT_SOURCE_2, EXT_SOURCE_3) ignoring NaN",
+      "inputs": [
+        "EXT_SOURCE_1",
+        "EXT_SOURCE_2",
+        "EXT_SOURCE_3"
+      ],
+      "unit": "score 0-1",
+      "interpretation": "Worst rating among available external credit bureau sources.",
+      "leakage_assessment": "Safe: external scores are inputs known at application time."
+    },
+    {
+      "name": "EXT_SOURCE_MAX",
+      "formula": "max(EXT_SOURCE_1, EXT_SOURCE_2, EXT_SOURCE_3) ignoring NaN",
+      "inputs": [
+        "EXT_SOURCE_1",
+        "EXT_SOURCE_2",
+        "EXT_SOURCE_3"
+      ],
+      "unit": "score 0-1",
+      "interpretation": "Best rating among available external credit bureau sources.",
+      "leakage_assessment": "Safe: external scores are inputs known at application time."
+    },
+    {
+      "name": "EXT_SOURCE_STD",
+      "formula": "std(EXT_SOURCE_1, EXT_SOURCE_2, EXT_SOURCE_3) ignoring NaN",
+      "inputs": [
+        "EXT_SOURCE_1",
+        "EXT_SOURCE_2",
+        "EXT_SOURCE_3"
+      ],
+      "unit": "score 0-1",
+      "interpretation": "Standard deviation across external sources (measures bureau consensus).",
+      "leakage_assessment": "Safe: external scores are inputs known at application time."
+    },
+    {
+      "name": "AGE_EMPLOYED_DIFF",
+      "formula": "AGE_YEARS - EMPLOYMENT_YEARS",
+      "inputs": [
+        "AGE_YEARS",
+        "EMPLOYMENT_YEARS"
+      ],
+      "unit": "years",
+      "interpretation": "Age of client when starting current employment.",
+      "leakage_assessment": "Safe: derived from application inputs."
+    },
+    {
+      "name": "CHILDREN_RATIO",
+      "formula": "CNT_CHILDREN / CNT_FAM_MEMBERS",
+      "inputs": [
+        "CNT_CHILDREN",
+        "CNT_FAM_MEMBERS"
+      ],
+      "unit": "ratio",
+      "interpretation": "Ratio of children to total family members (dependent burden).",
+      "leakage_assessment": "Safe: both known at application time."
+    },
+    {
+      "name": "INCOME_MINUS_ANNUITY",
+      "formula": "AMT_INCOME_TOTAL - AMT_ANNUITY",
+      "inputs": [
+        "AMT_INCOME_TOTAL",
+        "AMT_ANNUITY"
+      ],
+      "unit": "currency",
+      "interpretation": "Net disposable annual income proxy after annual debt service.",
+      "leakage_assessment": "Safe: both known at application time."
     }
   ]
 }

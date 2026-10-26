@@ -1,28 +1,28 @@
 {
   "model_name": "XGBoost",
   "model_key": "xgboost",
-  "model_version": "20261025T184404Z-52e96b89",
+  "model_version": "20261026T012333Z-52e96b89",
   "api_version": "0.1.0",
   "candidate_details": {
     "logistic_regression": {
       "display_name": "Logistic Regression",
-      "decision_threshold": 0.14694782070215348,
+      "decision_threshold": 0.15390379904008164,
       "threshold_basis": "held_out_validation_f1",
       "calibration_method": "sigmoid",
       "validation_metrics": {
         "threshold": 0.5,
-        "accuracy": 0.9191699524409577,
-        "precision": 0.45901639344262296,
-        "recall": 0.007049345417925478,
-        "f1": 0.01388544507810563,
-        "roc_auc": 0.7418998654966815,
-        "pr_auc": 0.21847610209031515,
-        "brier_score": 0.06894001502956235,
+        "accuracy": 0.9191902768180156,
+        "precision": 0.4642857142857143,
+        "recall": 0.006545820745216516,
+        "f1": 0.012909632571996028,
+        "roc_auc": 0.7446173735716676,
+        "pr_auc": 0.22245780108739835,
+        "brier_score": 0.06877474090556904,
         "confusion_matrix": {
-          "tn": 45197,
-          "fp": 33,
-          "fn": 3944,
-          "tp": 28
+          "tn": 45200,
+          "fp": 30,
+          "fn": 3946,
+          "tp": 26
         },
         "n": 49202,
         "positive_rate": 0.0807284256737531,
@@ -31,7 +31,7 @@
     },
     "decision_tree": {
       "display_name": "Decision Tree",
-      "decision_threshold": 0.12703186318389112,
+      "decision_threshold": 0.15292218176826422,
       "threshold_basis": "held_out_validation_f1",
       "calibration_method": "sigmoid",
       "validation_metrics": {
@@ -40,9 +40,9 @@
         "precision": 0.0,
         "recall": 0.0,
         "f1": 0.0,
-        "roc_auc": 0.7320572745677848,
-        "pr_auc": 0.20292895223385155,
-        "brier_score": 0.06963766490726997,
+        "roc_auc": 0.7327481459315363,
+        "pr_auc": 0.2032281986022238,
+        "brier_score": 0.06961503952523473,
         "confusion_matrix": {
           "tn": 45230,
           "fp": 0,
@@ -56,7 +56,7 @@
     },
     "random_forest": {
       "display_name": "Random Forest",
-      "decision_threshold": 0.14970585327745758,
+      "decision_threshold": 0.14741058516073569,
       "threshold_basis": "held_out_validation_f1",
       "calibration_method": "sigmoid",
       "validation_metrics": {
@@ -65,9 +65,9 @@
         "precision": 0.0,
         "recall": 0.0,
         "f1": 0.0,
-        "roc_auc": 0.7478540141369868,
-        "pr_auc": 0.22490863090589258,
-        "brier_score": 0.06877747734199283,
+        "roc_auc": 0.7479762939292715,
+        "pr_auc": 0.22857275390125492,
+        "brier_score": 0.06869243303831338,
         "confusion_matrix": {
           "tn": 45230,
           "fp": 0,
@@ -81,7 +81,7 @@
     },
     "xgboost": {
       "display_name": "XGBoost",
-      "decision_threshold": 0.16892268018171427,
+      "decision_threshold": 0.15510368474308914,
       "threshold_basis": "held_out_validation_f1",
       "calibration_method": "sigmoid",
       "validation_metrics": {
@@ -90,9 +90,9 @@
         "precision": 0.0,
         "recall": 0.0,
         "f1": 0.0,
-        "roc_auc": 0.7559511762527833,
-        "pr_auc": 0.23821707512200774,
-        "brier_score": 0.06829293940644049,
+        "roc_auc": 0.7588443056736531,
+        "pr_auc": 0.24104078643690657,
+        "brier_score": 0.06812921173679087,
         "confusion_matrix": {
           "tn": 45230,
           "fp": 0,
@@ -105,7 +105,32 @@
       }
     }
   },
-  "decision_threshold": 0.16892268018171427,
+  "decision_threshold": 0.15510368474308914,
+  "risk_score_config": {
+    "threshold": 0.166,
+    "bands": [
+      {
+        "name": "Low",
+        "min_prob": 0.0,
+        "max_prob": 0.06
+      },
+      {
+        "name": "Moderate",
+        "min_prob": 0.06,
+        "max_prob": 0.15
+      },
+      {
+        "name": "High",
+        "min_prob": 0.15,
+        "max_prob": 0.25
+      },
+      {
+        "name": "Critical",
+        "min_prob": 0.25,
+        "max_prob": 1.01
+      }
+    ]
+  },
   "dataset_sha256": "52e96b895b1112e1c853f670e58372719c8441c5ed1c57ac2f7fad559d784f5f",
   "training_config": {
     "project": {
@@ -117,9 +142,9 @@
       "data_raw": "data/raw",
       "data_synthetic": "data/synthetic",
       "data_processed": "data/processed",
-      "artifacts": "reports/retrained/artifacts",
-      "reports": "reports/retrained/diagnostics",
-      "manifest": "reports/retrained/manifest.json"
+      "artifacts": "artifacts",
+      "reports": "reports",
+      "manifest": "data/manifest.json"
     },
     "dataset": {
       "source": "real",
@@ -168,11 +193,13 @@
       },
       "xgboost": {
         "enabled": true,
-        "n_estimators": 400,
+        "n_estimators": 450,
         "max_depth": 5,
-        "learning_rate": 0.05,
+        "learning_rate": 0.03,
         "subsample": 0.8,
-        "colsample_bytree": 0.8
+        "colsample_bytree": 0.8,
+        "min_child_weight": 20,
+        "reg_lambda": 1.0
       }
     },
     "calibration": {
@@ -180,7 +207,8 @@
       "cv": 3
     },
     "evaluation": {
-      "selection_metric": "roc_auc"
+      "selection_metric": "roc_auc",
+      "bootstrap_repeats": 200
     },
     "selection": {
       "cv_folds": 3
@@ -191,54 +219,55 @@
         "random_forest",
         "xgboost"
       ],
-      "n_iter": 4,
+      "n_iter": 6,
       "cv_folds": 3,
-      "max_search_samples": 30000,
+      "max_search_samples": 40000,
       "param_distributions": {
         "random_forest": {
           "model__n_estimators": [
             200,
-            300,
-            400
+            300
           ],
           "model__max_depth": [
             8,
-            12,
-            16,
-            20
+            10,
+            12
           ],
           "model__min_samples_leaf": [
-            10,
             20,
             50
           ]
         },
         "xgboost": {
           "model__n_estimators": [
-            300,
-            400,
-            600
+            350,
+            450,
+            550
           ],
           "model__max_depth": [
             4,
             5,
-            6,
-            8
+            6
           ],
           "model__learning_rate": [
+            0.02,
             0.03,
-            0.05,
-            0.1
+            0.05
           ],
           "model__subsample": [
-            0.7,
+            0.75,
             0.8,
-            1.0
+            0.85
           ],
           "model__colsample_bytree": [
             0.7,
             0.8,
-            1.0
+            0.85
+          ],
+          "model__min_child_weight": [
+            10,
+            20,
+            30
           ]
         }
       }
@@ -356,11 +385,11 @@
   },
   "evaluation_protocol": "train_only_fit_validation_threshold_test_report",
   "selection_note": "CV scores after hyperparameter search are selection diagnostics, not unbiased generalization estimates.",
-  "trained_at": "2026-10-25T18:44:05Z",
+  "trained_at": "2026-10-26T01:23:33Z",
   "dataset_source": "real",
   "synthetic": false,
   "synthetic_warning": null,
-  "manifest_reference": "reports/retrained/manifest.json",
+  "manifest_reference": "data/manifest.json",
   "feature_schema_version": "1.0",
   "selection_metric": "roc_auc",
   "selection_basis": "cross_validation_3fold_mean",
@@ -368,8 +397,8 @@
   "calibration": {
     "method": "sigmoid",
     "cv": 3,
-    "brier_before": 0.19524209201335907,
-    "brier_after": 0.06771427334957725,
+    "brier_before": 0.19306610524654388,
+    "brier_after": 0.06753705624872235,
     "improved": true,
     "status": "calibrated (isotonic/sigmoid via CV); probabilities adjusted toward observed frequencies"
   },
@@ -380,39 +409,14 @@
   "risk_score_definition": "risk_score = round(default_probability * 100)",
   "responsible_use_note": "Analytical estimate of default probability. NOT an autonomous lending decision. Requires human oversight.",
   "file_hashes": {
-    "model.joblib": "ed51a928d9c8351a504ac4ab48ab41a4f6877caa4adc165b21ade20c145b46db",
-    "metrics.json": "4419c06cf096b8e97f10e3aa58cd90b734404f87d07b92efb992db6deda4d977",
-    "feature_schema.json": "32929326b89f0dae3c56f23d3e448e64246ab627f18b815e4163a31a3c1c9769",
-    "models/logistic_regression.joblib": "c4d9b936072e5b6763c6f7bf03258cd0408900e4cb3e0111d811cd84aa9cb7b5",
-    "models/decision_tree.joblib": "da8412b1eec593e46e5fdac3fb6d486d488dc8e4a8e474a9e5aac9dd24d36bc1",
-    "models/random_forest.joblib": "7d337a81f84198e802612fb7d6aea229f2ae185fd10b07bc83972f97efa1a3f7",
-    "models/xgboost.joblib": "ed51a928d9c8351a504ac4ab48ab41a4f6877caa4adc165b21ade20c145b46db",
-    "dataset_manifest.json": "138ee023c12953175e6ce9bc9bcb2a0bc3be773a1f6bd9f65a8c5a810062e3e4",
-    "validation_report.json": "64d3bf94c3c478e6f16714ccc5f1b21b235721a058fd5ef14b13c011dbe7bb4b"
-  },
-  "risk_score_config": {
-    "threshold": 0.166,
-    "bands": [
-      {
-        "name": "Low",
-        "min_prob": 0.0,
-        "max_prob": 0.06
-      },
-      {
-        "name": "Moderate",
-        "min_prob": 0.06,
-        "max_prob": 0.15
-      },
-      {
-        "name": "High",
-        "min_prob": 0.15,
-        "max_prob": 0.25
-      },
-      {
-        "name": "Critical",
-        "min_prob": 0.25,
-        "max_prob": 1.01
-      }
-    ]
+    "model.joblib": "f9dd49d970ef8379d93f8e17eea947eb1e68998672054463d13d8debc12ba3d5",
+    "metrics.json": "00d2ef7265730db638e29a774e8eb09a37c994e8f8a318d0cd85dacb853490e1",
+    "feature_schema.json": "6de76982e9bd937e9e2b3f7c46a5cb4354b107b9bb62d844f0fa1196969cdc57",
+    "dataset_manifest.json": "8505458c1778d1ab50b593fc6160962e1454d59d0aae70dfdac27a53d371cce2",
+    "validation_report.json": "64d3bf94c3c478e6f16714ccc5f1b21b235721a058fd5ef14b13c011dbe7bb4b",
+    "models/logistic_regression.joblib": "c0fc313cd89c4587bf1d6f6a99acd2cb24f54f09fee8a177ea962884ab6da0d5",
+    "models/decision_tree.joblib": "58a9ff1de0e9575052cb9906ce386d8302252e7d21b48d286f4c7676f753e3ac",
+    "models/random_forest.joblib": "d969924ea6f33c58083def8a5f047654ab004e622b109821e7e7491b08e4d1d1",
+    "models/xgboost.joblib": "f9dd49d970ef8379d93f8e17eea947eb1e68998672054463d13d8debc12ba3d5"
   }
 }

@@ -77,6 +77,9 @@ def _xgb(cfg: Config, scale_pos_weight: float) -> ModelSpec:
         n_estimators=int(p["n_estimators"]), max_depth=int(p["max_depth"]),
         learning_rate=float(p["learning_rate"]), subsample=float(p["subsample"]),
         colsample_bytree=float(p["colsample_bytree"]),
+        min_child_weight=int(p.get("min_child_weight", 20)),
+        reg_lambda=float(p.get("reg_lambda", 1.0)),
+        reg_alpha=float(p.get("reg_alpha", 0.0)),
         scale_pos_weight=scale_pos_weight, eval_metric="logloss",
         tree_method="hist", random_state=cfg.seed, n_jobs=-1,
     )
